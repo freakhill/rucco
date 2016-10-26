@@ -21,6 +21,8 @@ struct Args<'a> {
     inputs: Vec<&'a str>
 }
 
+const RUCCOFILE_NAME: &'static str = "Ruccofile.toml";
+
 const ABOUT: &'static str = "
 Rucco, a docco derivative (documentation generator).
 
@@ -101,6 +103,13 @@ fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
     merged
 }
 
+struct Config<'a> {
+    recursive: bool,
+    entries: Vec<&'a str>,
+    output_dir: &'a str,
+    languages: &'a toml::Table
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -108,30 +117,48 @@ fn main() {
     let args = Args::new(&matches);
     let resources: HashMap<Vec<u8>, Vec<u8>> = embed!("resources");
 
-    let default_conf = parse_default_conf(resources);
-    let conf = if let Some(conf_path) = args.conf {
-        let custom = parse_conf_file(conf_path);
-        merge_confs(&default_conf, &custom)
-    } else {
-        default_conf
-    };
+    // conf
+    let base_conf = parse_default_conf(resources);
+    let custom_conf_path = if let Some(conf_path) = args.conf { conf_path } else { RUCCOFILE_NAME };
+    let custom_conf = parse_conf_file(custom_conf_path);
+    let conf = merge_confs(&base_conf, &custom_conf);
 
-    let output = if let Some(output) = args.output {
+    let conf_input = conf.get("input").expect("malformed conf - no input")
+        .as_table().expect("malformed conf - input is not a table");
+    let conf_output = conf.get("output").expect("malformed conf - no output")
+        .as_table().expect("malformed conf - output is not a table");
+
+    // output
+    let output_dir = if let Some(output) = args.output {
         output
     } else {
-        // conf output
-        "TODO"
+        conf_output.get("dir").expect("malformed conf - no output.dir")
+            .as_str().expect("malformed conf - output.dir is not a string")
     };
 
     // nonrecursive
-    let recursive = !args.nonrecursive || true; // or conf.recursive
+    let recursive = !args.nonrecursive ||
+        conf_input
+        .get("recursive").expect("malformed conf - no input.recursive")
+        .as_bool().expect("malformed conf - input.recursive is not a boolean");
 
     // inputs
-    let inputs = if args.inputs.is_empty() {
-        vec![] // conf inputs
+    let entries = if args.inputs.is_empty() {
+        conf_input
+            .get("entries").expect("malformed conf - no input.entries")
+            .as_slice().expect("malformed conf - input.entries is not an array")
+            .iter().map(|ref v| v.as_str().expect("malformed conf - one entry in input.entries is not a string"))
+            .collect()
     } else {
         args.inputs
     };
+
+    // languages
+    let languages = conf.get("languages").expect("malformed conf - no languages")
+        .as_table().expect("malformed conf - languages is not a table");
+
+    let config = Config { recursive: recursive, entries: entries, output_dir: output_dir,
+                          languages: &languages };
 
     // if ruccofile does not exist, dump conf in!
 
