@@ -22,7 +22,7 @@ fn parse_args() {
         .arg(Arg::with_name("config")
              .short("c")
              .long("config")
-             .value_name("RUCCOFILE")
+             .value_name("ruccofile")
              .help("Conf file to use (default is \"Ruccofile.toml\")")
              .takes_value(true))
         .arg(Arg::with_name("output")
@@ -37,15 +37,15 @@ fn parse_args() {
              .value_name("FILE")
              .help("Explore directories recursively (default is true)")
              .takes_value(true))
-        .arg(Arg::with_name("INPUTS")
-             .help("Sets the input file to use")
+        .arg(Arg::with_name("inputs")
+             .help("Files and directories to parse for documentation")
              .multiple(true)
              .value_name("FILE_OR_DIR")
              .index(1))
         .get_matches();
 
     // Gets a value for config if supplied by user, or defaults to "default.conf"
-    let inputs : Vec<&str> = matches.values_of("INPUTS").unwrap().collect();
+    let inputs = matches.values_of("inputs").unwrap();
     for s in inputs {
         println!("Value for config: {}", s);
     }
