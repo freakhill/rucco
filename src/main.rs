@@ -27,6 +27,9 @@ const ABOUT: &'static str = "
 Rucco, a docco derivative (documentation generator).
 
 This tool will automatically generate a 'Ruccofile.toml' conf file if lacking.
+
+Command line argument priority > Ruccofile priority > Base config priority.
+(The base config is embedded in the rucco binary).
 ";
 
 fn cli<'a, 'b>() -> App<'a, 'b> {
