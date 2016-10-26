@@ -160,7 +160,7 @@ fn main() {
     let config = Config { recursive: recursive, entries: entries, output_dir: output_dir,
                           languages: &languages };
 
-    // if ruccofile does not exist, dump conf in!
+    // if ruccofile does not exist, dump final config in!
 
     // ...
 
