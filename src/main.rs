@@ -40,7 +40,7 @@ fn parse_args() {
         .arg(Arg::with_name("inputs")
              .help("Files and directories to parse for documentation")
              .multiple(true)
-             .value_name("FILE_OR_DIR")
+             .value_name("FILES_AND_DIRS")
              .index(1))
         .get_matches();
 
