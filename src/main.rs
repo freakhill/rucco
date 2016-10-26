@@ -4,28 +4,9 @@
 #![feature(plugin)]
 #![plugin(embed)]
 
-extern crate rustc_serialize;
-extern crate docopt;
-
 extern crate clap;
 use clap::{Arg, App, SubCommand};
 use std::collections::HashMap;
-
-const USAGE: &'static str = "
-
-Author: Jojo <gall.johan@linecorp.com>
-
-Usage:
-  rucco [--conf=<f>] [--output=<dir>] [--recursive] <files_and_dirs>...
-  rucco (-h | --help)
-  rucco --version
-
-Options:
-  -h --help          Show this screen.
-  --conf=<f>
-  --output=<dir>     .
-  --recursive=<boolean> Explore directories recursively (default is true).
-";
 
 const ABOUT: &'static str = "
 Rucco, a docco derivative (documentation generator).
@@ -33,7 +14,7 @@ Rucco, a docco derivative (documentation generator).
 This tool will automatically generate a 'Ruccofile.toml' conf file if lacking.
 ";
 
-fn parse_args() -> Args {
+fn parse_args() {
     let matches = App::new("rucco")
         .version("1.0")
         .author("jojo <gall.johan@linecorp.com>")
@@ -54,21 +35,24 @@ fn parse_args() -> Args {
              .short("r")
              .long("recursive")
              .value_name("FILE")
-             .help("Conf file to use (default is \"Ruccofile.toml\")")
+             .help("Explore directories recursively (default is true)")
              .takes_value(true))
-        .arg(Arg::with_name("INPUT")
+        .arg(Arg::with_name("INPUTS")
              .help("Sets the input file to use")
              .multiple(true)
+             .value_name("FILE_OR_DIR")
              .index(1))
         .get_matches();
 
     // Gets a value for config if supplied by user, or defaults to "default.conf"
-    let config = matches.value_of("config").unwrap_or("default.conf");
-    println!("Value for config: {}", config);
+    let inputs : Vec<&str> = matches.values_of("INPUTS").unwrap().collect();
+    for s in inputs {
+        println!("Value for config: {}", s);
+    }
 
     // Calling .unwrap() is safe here because "INPUT" is required (if "INPUT" wasn't
     // required we could have used an 'if let' to conditionally get the value)
-    println!("Using input file: {}", matches.value_of("INPUT").unwrap());
+    //println!("Using input file: {}", matches.value_of("INPUT").unwrap());
 
     // Vary the output based on how many times the user used the "verbose" flag
     // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
@@ -78,13 +62,6 @@ fn parse_args() -> Args {
         2 => println!("Tons of verbose info"),
         3 | _ => println!("Don't be crazy"),
     }
-
-    // more program logic goes here...
-    let args: Args = Docopt::new(USAGE)
-        .and_then(|d| d.decode())
-        .unwrap_or_else(|e| e.exit());
-    println!("{:?}", args);
-    args
 }
 
 fn main() {
@@ -98,7 +75,7 @@ fn main() {
     // 4.4 render the whole thing with regex
     let args = parse_args();
     let files: HashMap<Vec<u8>, Vec<u8>> = embed!("resources");
-    for (name, content) in files {
-        println!("{}: \"{}\"", String::from_utf8(name).unwrap(), String::from_utf8(content).unwrap().trim());
-    }
+    //for (name, content) in files {
+    //    println!("{}: \"{}\"", String::from_utf8(name).unwrap(), String::from_utf8(content).unwrap().trim());
+    //}
 }
