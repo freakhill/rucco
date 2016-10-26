@@ -89,20 +89,13 @@ fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
     let mut merged: toml::Table = BTreeMap::new();
     let keys: HashSet<&String> = base.keys().chain(custom.keys()).collect();
     for key in keys {
-        let val = if let Some(customval) = custom.get(key) {
-            if let Some(baseval) = custom.get(key) {
-                if let (&toml::Value::Table(ref basetable),
-                        &toml::Value::Table(ref customtable))
-                    = (baseval,customval) {
-                    toml::Value::Table(merge_confs(&basetable, &customtable))
-                } else {
-                    customval.clone()
-                }
-            } else {
-                customval.clone()
-            }
-        } else {
-            base.get(key).unwrap().clone()
+        let val = match (base.get(key), custom.get(key)) {
+            (Some(&toml::Value::Table(ref basetable)),
+             Some(&toml::Value::Table(ref customtable))) =>
+                toml::Value::Table(merge_confs(&basetable, &customtable)),
+            (_, Some(customval)) => customval.clone(),
+            (Some(baseval),_) => baseval.clone(),
+            (_,_) => panic!("wat!???")
         };
         merged.insert(key.clone(), val);
     };
