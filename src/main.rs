@@ -12,7 +12,7 @@ use std::collections::HashMap;
 struct Args<'a> {
     conf: Option<&'a str>,
     output: Option<&'a str>,
-    recursive: Option<bool>,
+    notrecursive: bool,
     inputs: Vec<&'a str>
 }
 
@@ -56,7 +56,7 @@ fn parse_args<'a, 'b>(app : &'b mut App<'a, 'b>) -> Args<'a> {
     Args {
         conf: matches.value_of("config"),
         output: matches.value_of("output"),
-        recursive: matches.value_of("recursive"),
+        notrecursive: matches.is_present("not-recursive"),
         inputs: inputs,
     }
 }
