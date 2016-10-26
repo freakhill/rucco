@@ -99,7 +99,6 @@ fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
         };
         merged.insert(key.clone(), val);
     };
-
     merged
 }
 
