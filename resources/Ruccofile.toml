@@ -164,9 +164,6 @@ singleline =  "#+"
 [languages.rs]
 name = "rust"
 singleline = "//[/!]?"
-[languages.tex]
-name = "tex"
-singleline = "%"
 [languages.scala]
 name = "scala"
 singleline = "//"
@@ -197,6 +194,9 @@ singleline = "//"
 [languages.t]
 name = "perl"
 singleline =  "#"
+[languages.tex]
+name = "tex"
+singleline = "%"
 [languages.ts]
 name = "typescript"
 singleline = "//"
@@ -223,16 +223,10 @@ name = "vhdl"
 singleline = "--"
 [languages.vim]
 name = "vim"
-singleline = "\'"
+singleline = "\""
 [languages.r]
 name = "r"
 singleline =  "#"
-[languages.rc]
-name = "rust"
-singleline = "//"
-[languages.rs]
-name = "rust"
-singleline = "//"
 [languages.toml]
 name = "toml"
 singleline =  "#+"

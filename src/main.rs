@@ -80,7 +80,6 @@ fn parse_default_conf(mut resources: HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
         .expect("could not find default conf failed!??");
     let file_as_string = String::from_utf8(file_as_bytes)
         .expect("default conf not utf8!??");
-    println!("CONFCONFCONF:\n{}",file_as_string);
     toml::Parser::new(file_as_string.as_str()).parse()
         .expect("default conf parsing failed!??")
 }
