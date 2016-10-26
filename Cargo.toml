@@ -5,7 +5,6 @@ authors = ["johan gall <johan.gall@gmail.com>"]
 
 [dependencies]
 clap = "~2.16.1" # command line argument parser
-serde = "~0.8" # json
-serde_json = "~0.8" # json (for languages files)
+toml = "~0.2.1" # conf files
 embed = "~0.1.1" # embed resources in binary
 rucco_lib = { path = "rucco_lib" }
