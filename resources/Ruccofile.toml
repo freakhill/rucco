@@ -1,6 +1,6 @@
 [input]
 recursive = true
-files = [ "./" ]
+entries = [ "./" ]
 
 [output]
 dir = "docs"
