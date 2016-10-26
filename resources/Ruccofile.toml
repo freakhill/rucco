@@ -1,4 +1,4 @@
-[input]
+[inputs]
 recursive = true
 entries = [ "./" ]
 

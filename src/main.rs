@@ -10,12 +10,14 @@ extern crate env_logger;
 extern crate clap;
 use clap::{Arg, ArgMatches, App};
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::collections::BTreeMap;
 
 //#[derive(Debug)]
 struct Args<'a> {
     conf: Option<&'a str>,
     output: Option<&'a str>,
-    notrecursive: bool,
+    nonrecursive: bool,
     inputs: Vec<&'a str>
 }
 
@@ -69,33 +71,57 @@ impl<'a> Args<'a> {
     }
 }
 
-fn parse_conf_file(path: &str) -> u32 {
-    1
+fn parse_conf_file(path: &str) -> toml::Table {
+    BTreeMap::new()
 }
 
-fn parse_default_conf(resources: HashMap<Vec<u8>, Vec<u8>>) -> u32 {
-    1
+fn parse_default_conf(mut resources: HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
+    let file_as_bytes = resources.remove("Ruccofile.toml".as_bytes())
+        .expect("could not find default conf failed!??");
+    let file_as_string = String::from_utf8(file_as_bytes)
+        .expect("default conf not utf8!??");
+    toml::Parser::new(file_as_string.as_str()).parse()
+        .expect("default conf parsing failed!??")
+}
+
+fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
+    let mut merged: toml::Table = BTreeMap::new();
+    let keys: HashSet<&String> = base.keys().chain(custom.keys()).collect();
+    for key in keys {
+        let val = if let Some(customval) = custom.get(key) {
+            if let Some(baseval) = custom.get(key) {
+                if let (&toml::Value::Table(ref basetable),
+                        &toml::Value::Table(ref customtable))
+                    = (baseval,customval) {
+                    toml::Value::Table(merge_confs(&basetable, &customtable))
+                } else {
+                    customval.clone()
+                }
+            } else {
+                customval.clone()
+            }
+        } else {
+            base.get(key).unwrap().clone()
+        };
+        merged.insert(key.clone(), val);
+    };
+
+    merged
 }
 
 fn main() {
     env_logger::init().unwrap();
-    // 1. load params
-    // 2. read config
-    // 3. create output folder
-    // 4. go recursively in input folders and for each file
-    // 4.1 split in comments and code sections
-    // 4.2 use syntect to colorize code (html)
-    // 4.3 stick in between comment section
-    // 4.4 render the whole thing with regex
+
     let matches = cli().get_matches();
     let args = Args::new(&matches);
     let resources: HashMap<Vec<u8>, Vec<u8>> = embed!("resources");
 
     let default_conf = parse_default_conf(resources);
     let conf = if let Some(conf_path) = args.conf {
-        parse_conf_file(conf_path) // merge defautl conf in
+        let custom = parse_conf_file(conf_path);
+        merge_confs(&default_conf, &custom)
     } else {
-       default_conf
+        default_conf
     };
 
     let output = if let Some(output) = args.output {
@@ -106,17 +132,14 @@ fn main() {
     };
 
     // nonrecursive
-    let recursive = non(args.nonrecursive) or true; // or conf.recursive
+    let recursive = !args.nonrecursive || true; // or conf.recursive
 
     // inputs
     let inputs = if args.inputs.is_empty() {
         vec![] // conf inputs
     } else {
         args.inputs
-    }
-    //for (name, content) in files {
-    //    println!("{}: \"{}\"", String::from_utf8(name).unwrap(), String::from_utf8(content).unwrap().trim());
-    //}
+    };
 
     // if ruccofile does not exist, dump conf in!
 
