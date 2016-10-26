@@ -233,6 +233,9 @@ singleline = "//"
 [languages.rs]
 name = "rust"
 singleline = "//"
+[languages.toml]
+name = "toml"
+singleline =  "#+"
 [languages.wsc]
 name = "vbscript"
 singleline = "'"
