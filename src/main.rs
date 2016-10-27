@@ -32,22 +32,20 @@ use clap::{Arg, ArgMatches, App};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
-use walkdir
-use std::collections::LinkedList;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::prelude::*;
 use std::io;
 use std::fs;
 use std::env;
-use walkdir::Walkdir;
+use walkdir::{WalkDir};
 
 /// ## Static data
 
 /// A *ruccofile* (toml-formated) is a configuration file for this program.
 const RUCCOFILE_NAME: &'static str = "Ruccofile.toml";
 
-const MAX_RECURSE: u8 = 8;
+const MAX_DEPTH: u8 = 8;
 
 /// This will be used for the command line interface.
 const ABOUT: &'static str = "
@@ -204,33 +202,15 @@ fn ensure_ruccofile_exists(config: &Config) -> Result<(), io::Error> {
 /// We transform quite early paths to absolute paths so unless specifically mentionned
 /// we will be dealing with absolute paths!
 
-fn translate_to_output_dir(output_dir: &PathBuf, pwd: &PathBuf, ) -> PathBuf {
-
-}
-//fn doc_path_for_source_file(pb: &)
-///
-
-
-fn ensure_dir(output_dir: &Config, pwd: &PathBuf, dir: &PathBuf) {
-    info!("ensuring dir for: {}", dir.to_str().unwrap_or("`unprintable`"));
-    //
-}
-
-fn ensure_output_dir(config: &Config) {
-    if let Err(e) = do_ensure_dir_internal(Path::new(config.output_dir)) {
-        panic!("failed to ensure that output directory exists: {}", e);
-    };
-}
-
-fn do_ensure_dir_internal(path: &Path) -> io::Result<()> {
+fn ensure_dir(path: &PathBuf) -> io::Result<()> {
     if !path.is_dir() {
         try![fs::create_dir(path)];
     }
     Ok(())
 }
 
-fn process_file(config: &Config, pwd: &PathBuf, pb: &PathBuf) {
-    info!("processing file: {}", pb.to_str().unwrap_or("`unprintable`"));
+fn process_file(config: &Config, source: &Path, target: &Path) {
+    info!("from {} to {}", source.display(), target.display());
 }
 
 trait Absolute {
@@ -324,64 +304,44 @@ fn main() {
         }
     }
 
-    // and now recurse files and dump shit!
+    // and now processing!
+    ensure_dir(&PathBuf::from(config.output_dir))
+        .expect("failed to ensure that output directory exists.");
     let pwd = env::current_dir().expect("failed to get current dir!");
-    let absolute_output_dir = PathBuf::from(config.output_dir).to_absolute(&pwd);
+    let output_dir = fs::canonicalize(config.output_dir)
+        .expect("failed to canonicalize output dir path.");
 
-    let entries = config.entries.iter().map(|ref p| PathBuf::new(p));
+    // and now recurse files and dump shit!
+    let entries = config.entries.iter()
+        .filter_map(|p| fs::canonicalize(p).ok())
+        .filter(|p| !p.starts_with(&output_dir))
+        .filter(|p| p.starts_with(&pwd));
     if config.recursive {
         for entry in entries {
-            for entry in WalkDir::new(entry).filter_map(|p| p.is_ok()) {
-                println!("{}", entry.path().display());
+            for entry in WalkDir::new(entry)
+                .follow_links(false)
+                .max_depth(MAX_DEPTH as usize)
+                .into_iter()
+                .filter_map(|p| p.ok())
+            {
+                let relative = entry.path().strip_prefix(&pwd)
+                    .expect("failed to generate a relative path.");
+                if entry.path().is_dir() {
+                    ensure_dir(&output_dir.join(&relative))
+                        .expect("failed to create subdirectory in output dir.");
+                } else {
+                    let target = output_dir.join(&relative);
+                    process_file(&config, &relative, &target);
+                }
             }
         }
     } else {
-        for file in entries.filter_map(|p| p.is_file()) {
-            println!("{}", file.display());
+        for file in entries.filter(|p| p.is_file()) {
+            let relative = file.strip_prefix(&pwd)
+                .expect("failed to generate a relative path.");
+            let target = output_dir.join(&relative);
+            process_file(&config, &relative, &target);
         }
     }
-    // don't blow the stack (ノ°Д°）ノ︵ plzplz!
-    // simple recursion, we use a struct to provide ~~anonymous~~ recursion
-    struct Dive<'s> { f: &'s Fn(&Dive, Box<PathBuf>, u8) -> LinkedList<Action> };
-    let dive: Dive = Dive { f: &|dive, p, depth_allowed| {
-        let mut l: LinkedList<Action> = LinkedList::new();
-        if p.starts_with(absolute_output_dir) {
-            // we skip on dirs and files inside our ouput directory!
-            l
-        } else {
-            let path = p.as_path();
-            if path.is_file() {
-                l.push_back(Action::ProcessFile(p.clone()));
-            } else if path.is_dir() && depth_allowed != 0 {
-                l.push_back(Action::EnsureDir(p.clone()));
-                match path.read_dir() {
-                    Ok(dir) => {
-                        for entryres in dir {
-                            match entryres {
-                                Ok(entry) => {
-                                    let mut segment = (dive.f)(&dive, Box::new(entry.path().to_owned()), depth_allowed - 1);
-                                    l.append(&mut segment);
-                                },
-                                Err(e) => {error!("failed to read dir entry in dir {}: {}", path.to_str().unwrap_or("`unprintable`"), e);}
-                            }
-                        }
-                    },
-                Err(e) => {error!("failed to read dir {}: {}", path.to_str().unwrap_or("`unprintable`"), e);}
-                };
-            };
-            l
-        }
-    }};
-    info!("generating list of files to process.");
-    let actions = config.entries.iter().flat_map(|ref p| (dive.f)(&dive, Box::new(PathBuf::from(p).to_absolute(&pwd)), MAX_RECURSE));
-    info!("ensure output dir exists");
-    ensure_output_dir(&config);
-    info!("processing files");
-    for action in actions {
-        match action {
-            Action::EnsureDir(dir) => { ensure_dir(&absolute_output_dir, &pwd, &dir); },
-            Action::ProcessFile(file) => { process_file(&config, &absolute_output_dir, &pwd, &file); }
-        }
-    };
     info!("complete!");
 }
