@@ -31,15 +31,19 @@ use clap::{Arg, ArgMatches, App};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
+use std::collections::LinkedList;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::io::prelude::*;
 use std::io;
+use std::fs;
 
 /// ## Static data
 
 /// A *ruccofile* (toml-formated) is a configuration file for this program.
 const RUCCOFILE_NAME: &'static str = "Ruccofile.toml";
+
+const MAX_RECURSE: u8 = 8;
 
 /// This will be used for the command line interface.
 const ABOUT: &'static str = "
@@ -126,7 +130,7 @@ fn parse_conf_file(path: &str) -> Result<toml::Table, io::Error> {
     let mut conf_string = String::new();
     try![conf_file.read_to_string(&mut conf_string)];
     Ok(toml::Parser::new(conf_string.as_str()).parse()
-        .expect("failed to parse custom ruccofile"))
+       .expect("failed to parse custom ruccofile"))
 }
 
 /// This function parses the base ruccofile embedded in our binary.
@@ -189,6 +193,27 @@ fn ensure_ruccofile_exists(config: &Config) -> Result<(), io::Error> {
         try![ruccofile.write_all(toml::encode_str(&conf_languages).as_bytes())];
     }
     Ok(())
+}
+
+/// ## The function actually doing stuff
+
+
+fn ensure_dir(config: &Config, dir: &PathBuf) {
+    info!("ensuring dir for: {}", dir.to_str().unwrap_or("`unprintable`"));
+    if let Err(e) = do_ensure_dir_internal(Path::new(config.output_dir)) {
+        panic!("failed to ensure that output directory exists: {}", e);
+    };
+}
+
+fn do_ensure_dir_internal(path: &Path) -> io::Result<()> {
+    if !path.is_dir() {
+        try![fs::create_dir(path)];
+    }
+    Ok(())
+}
+
+fn process_file(config: &Config, pb: &PathBuf) {
+    info!("processing file: {}", pb.to_str().unwrap_or("`unprintable`"));
 }
 
 /// ## The main function!
@@ -259,4 +284,45 @@ fn main() {
     }
 
     // and now recurse files and dump shit!
+    enum Action {
+        EnsureDir(Box<PathBuf>),
+        ProcessFile(Box<PathBuf>)
+    };
+    // don't blow the stack (ノ°Д°）ノ︵ plzplz!
+    // simple recursion, we use a struct to provide ~~anonymous~~ recursion
+    struct Dive<'s> { f: &'s Fn(&Dive, Box<PathBuf>, u8) -> LinkedList<Action> };
+    let dive: Dive = Dive { f: &|dive, p, depth_allowed| {
+        let mut l: LinkedList<Action> = LinkedList::new();
+        let path = p.as_path();
+        if path.is_file() {
+            l.push_back(Action::ProcessFile(p.clone()));
+        } else if path.is_dir() && depth_allowed != 0 {
+            l.push_back(Action::EnsureDir(p.clone()));
+            match path.read_dir() {
+                Ok(dir) => {
+                    for entryres in dir {
+                        match entryres {
+                            Ok(entry) => {
+                                let mut segment = (dive.f)(&dive, Box::new(entry.path().to_owned()), depth_allowed - 1);
+                                l.append(&mut segment);
+                            },
+                            Err(e) => {error!("failed to read dir entry in dir {}: {}", path.to_str().unwrap_or("`unprintable`"), e);}
+                        }
+                    }
+                },
+                Err(e) => {error!("failed to read dir {}: {}", path.to_str().unwrap_or("`unprintable`"), e);}
+            };
+        };
+        l
+    }};
+    info!("generating list of files to process.");
+    let actions = config.entries.iter().flat_map(|ref p| (dive.f)(&dive, Box::new(Path::new(p).to_owned()), MAX_RECURSE));
+    info!("processing files");
+    for action in actions {
+        match action {
+            Action::EnsureDir(dir) => { ensure_dir(&config, &dir); },
+            Action::ProcessFile(file) => { process_file(&config, &file); }
+        }
+    }
+    info!("complete!");
 }
