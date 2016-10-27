@@ -224,10 +224,14 @@ fn main() {
     };
 
     // nonrecursive
-    let recursive = !args.nonrecursive ||
+    /// using ! and || makes it hard to read, so ifs!
+    let recursive = if args.nonrecursive {
+        false
+    } else {
         conf_input
-        .get("recursive").expect("malformed conf - no input.recursive")
-        .as_bool().expect("malformed conf - input.recursive is not a boolean");
+            .get("recursive").expect("malformed conf - no input.recursive")
+            .as_bool().expect("malformed conf - input.recursive is not a boolean")
+    };
 
     // inputs
     let entries = if args.inputs.is_empty() {
