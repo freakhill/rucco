@@ -213,30 +213,6 @@ fn process_file(config: &Config, source: &Path, target: &Path) {
     info!("from {} to {}", source.display(), target.display());
 }
 
-trait Absolute {
-    fn to_absolute(&self, &PathBuf) -> PathBuf;
-}
-
-impl Absolute for Path {
-    fn to_absolute(&self, pwd: &PathBuf) -> PathBuf {
-        if !self.is_absolute() {
-            pwd.join(self)
-        } else {
-            self.to_owned()
-        }
-    }
-}
-
-impl Absolute for PathBuf {
-    fn to_absolute(&self, pwd: &PathBuf) -> PathBuf {
-        if !self.is_absolute() {
-            pwd.join(self)
-        } else {
-            self.clone()
-        }
-    }
-}
-
 /// ## The main function!
 
 /// And now we put everything together.
