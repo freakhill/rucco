@@ -1,28 +1,45 @@
 //! # Rucco
 //! A Docco derivative in Rust (with multiline support)
+//!
+//! This is a simple program that will parse through source files
+//! comments and source segments, as quick'n'dirt litterate files
+//! and render them in a html+css+js soup.
+//!
+//! Comments must be markdown-formatted.
+//!
+//! This program is parametered through its command line interface
+//! and a *ruccofile* (typically "Ruccofile.toml).
+//!
+//! Command line argument priority > Ruccofile priority > Base config priority.
+//! (The base config is embedded in the rucco binary).
+//!
+//! Concerning the source files, multiline and singleline comments
+//! can generally be supported.
 
 #![feature(plugin)]
 #![plugin(embed)]
 
-#[macro_use] extern crate log;
-extern crate toml;
-extern crate env_logger;
-extern crate clap;
+/// the embed plugin allows us to embed files into our binary!
+/// (base conf, css, js etc.)
+
+#[macro_use] extern crate log; /// for logging...
+extern crate env_logger; /// makes our logger configurable by environment variable (eg. RUST_LOG=debug)
+extern crate toml; /// for configuration files
+extern crate clap; /// "Command Line Argument Parsing" library
+
 use clap::{Arg, ArgMatches, App};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::path::Path;
 
-//#[derive(Debug)]
-struct Args<'a> {
-    conf: Option<&'a str>,
-    output: Option<&'a str>,
-    nonrecursive: bool,
-    inputs: Vec<&'a str>
-}
+/// ## Static data
 
+/// A *ruccofile* (toml-formated) is a configuration file for this program.
 const RUCCOFILE_NAME: &'static str = "Ruccofile.toml";
 
+/// This will be used for the command line interface.
 const ABOUT: &'static str = "
 Rucco, a docco derivative (documentation generator).
 
@@ -32,6 +49,29 @@ Command line argument priority > Ruccofile priority > Base config priority.
 (The base config is embedded in the rucco binary).
 ";
 
+/// ## Structures
+
+/// This will hold the data retrieved through clap.
+struct Args<'a> {
+    conf: Option<&'a str>,
+    output: Option<&'a str>,
+    nonrecursive: bool,
+    inputs: Vec<&'a str>
+}
+
+/// This will hold our final configuration (after merging clap data and ruccofile data).
+struct Config<'a> {
+    recursive: bool,
+    entries: Vec<&'a str>,
+    output_dir: &'a str,
+    languages: &'a toml::Table
+}
+
+/// ## CLI
+
+/// We segragate the generation of the CLI in its own function.
+/// It is not too easy to add to much more processing here because
+/// of lifetime concerns.
 fn cli<'a, 'b>() -> App<'a, 'b> {
     App::new("rucco")
         .version("1.0")
@@ -61,6 +101,7 @@ fn cli<'a, 'b>() -> App<'a, 'b> {
              .index(1))
 }
 
+/// Given `cli().get-matches() -> ArgMatches`
 impl<'a> Args<'a> {
     fn new(matches: &'a ArgMatches<'a>) -> Args<'a> {
 
@@ -106,15 +147,19 @@ fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
     merged
 }
 
-struct Config<'a> {
-    recursive: bool,
-    entries: Vec<&'a str>,
-    output_dir: &'a str,
-    languages: &'a toml::Table
+fn ensure_ruccofile_exists(config: &Config) {
+    let ruccofile_path = Path::new(RUCCOFILE_NAME);
+    if !ruccofile_path.is_file() {
+        info!("generating configuration file: {}", RUCCOFILE_NAME);
+    }
+
 }
 
+/// #
 fn main() {
     env_logger::init().unwrap();
+
+    /// We start generation configuration
 
     let matches = cli().get_matches();
     let args = Args::new(&matches);
@@ -164,6 +209,7 @@ fn main() {
                           languages: &languages };
 
     // if ruccofile does not exist, dump final config in!
+    ensure_ruccofile_exists(&config);
 
     // ...
 
