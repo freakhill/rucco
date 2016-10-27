@@ -33,6 +33,8 @@ use std::collections::HashSet;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
+use std::io::prelude::*;
+use std::io;
 
 /// ## Static data
 
@@ -101,13 +103,12 @@ fn cli<'a, 'b>() -> App<'a, 'b> {
              .index(1))
 }
 
-/// Given `cli().get-matches() -> ArgMatches`
+/// Given `cli().get-matches() -> ArgMatches`, we choose to create this simple
+/// function.
 impl<'a> Args<'a> {
     fn new(matches: &'a ArgMatches<'a>) -> Args<'a> {
-
-        let inputs : Vec<&str> = matches.values_of("inputs").map_or(vec![],
-                                                                    &Iterator::collect);
-
+        let inputs : Vec<&str> = matches.values_of("inputs")
+            .map_or(vec![], &Iterator::collect);
         Args {
             conf: matches.value_of("config"),
             output: matches.value_of("output"),
@@ -117,10 +118,18 @@ impl<'a> Args<'a> {
     }
 }
 
-fn parse_conf_file(path: &str) -> toml::Table {
-    BTreeMap::new()
+/// ## Conf files
+
+/// This function parses a ruccofile whose path is given as parameter.
+fn parse_conf_file(path: &str) -> Result<toml::Table, io::Error> {
+    let mut conf_file = try![File::open(path)];
+    let mut conf_string = String::new();
+    try![conf_file.read_to_string(&mut conf_string)];
+    Ok(toml::Parser::new(conf_string.as_str()).parse()
+        .expect("failed to parse custom ruccofile"))
 }
 
+/// This function parses the base ruccofile embedded in our binary.
 fn parse_default_conf(mut resources: HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
     let file_as_bytes = resources.remove("Ruccofile.toml".as_bytes())
         .expect("could not find default conf failed!??");
@@ -130,6 +139,7 @@ fn parse_default_conf(mut resources: HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
         .expect("default conf parsing failed!??")
 }
 
+/// And this is a simple recursive function to merge configurations!
 fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
     let mut merged: toml::Table = BTreeMap::new();
     let keys: HashSet<&String> = base.keys().chain(custom.keys()).collect();
@@ -147,19 +157,45 @@ fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
     merged
 }
 
-fn ensure_ruccofile_exists(config: &Config) {
+/// Then with this function, if a ruccofile is not already present we can
+/// dump our merged config in.
+/// This function should be called only if a custom conf was not given through the cli.
+fn ensure_ruccofile_exists(config: &Config) -> Result<(), io::Error> {
     let ruccofile_path = Path::new(RUCCOFILE_NAME);
     if !ruccofile_path.is_file() {
         info!("generating configuration file: {}", RUCCOFILE_NAME);
-    }
+        let mut conf_input: toml::Table = BTreeMap::new();
+        let mut conf_output: toml::Table = BTreeMap::new();
+        let mut conf_languages: toml::Table = BTreeMap::new();
+        let mut input: toml::Table = BTreeMap::new();
+        let mut output: toml::Table = BTreeMap::new();
 
+        input.insert("recursive".to_string(), toml::Value::Boolean(config.recursive));
+        output.insert("dir".to_string(), toml::Value::String(config.output_dir.to_string()));
+        input.insert("entries".to_string(), toml::Value::Array(
+            config.entries.iter().map(|v| toml::Value::String(v.to_string())).collect()
+        ));
+
+        conf_input.insert("input".to_string(), toml::Value::Table(input));
+        conf_output.insert("output".to_string(), toml::Value::Table(output));
+        conf_languages.insert("languages".to_string(), toml::Value::Table(config.languages.clone()));
+
+        let mut ruccofile = try![File::create(RUCCOFILE_NAME)];
+        /// we do this that way only to make the final file more readable!
+        try![ruccofile.write_all(toml::encode_str(&conf_input).as_bytes())];
+        try![ruccofile.write_all("\n".as_bytes())];
+        try![ruccofile.write_all(toml::encode_str(&conf_output).as_bytes())];
+        try![ruccofile.write_all("\n".as_bytes())];
+        try![ruccofile.write_all(toml::encode_str(&conf_languages).as_bytes())];
+    }
+    Ok(())
 }
 
-/// #
+/// ## The main function!
+
+/// And now we put everything together.
 fn main() {
     env_logger::init().unwrap();
-
-    /// We start generation configuration
 
     let matches = cli().get_matches();
     let args = Args::new(&matches);
@@ -168,7 +204,10 @@ fn main() {
     // conf
     let base_conf = parse_default_conf(resources);
     let custom_conf_path = if let Some(conf_path) = args.conf { conf_path } else { RUCCOFILE_NAME };
-    let custom_conf = parse_conf_file(custom_conf_path);
+    let custom_conf = parse_conf_file(custom_conf_path).unwrap_or_else(|e| {
+        info!("no custom ruccofile: {}", e);
+        BTreeMap::new()
+    });
     let conf = merge_confs(&base_conf, &custom_conf);
 
     let conf_input = conf.get("input").expect("malformed conf - no input")
@@ -208,10 +247,12 @@ fn main() {
     let config = Config { recursive: recursive, entries: entries, output_dir: output_dir,
                           languages: &languages };
 
-    // if ruccofile does not exist, dump final config in!
-    ensure_ruccofile_exists(&config);
-
-    // ...
+    // if a ruccofile was not given as parameter, ensure a local one exists (create if necessary).
+    if let None = args.conf {
+        if let Err(e) = ensure_ruccofile_exists(&config) {
+            error!("failed to make sure ruccofile exists: {}", e);
+        }
+    }
 
     // and now recurse files and dump shit!
 }
