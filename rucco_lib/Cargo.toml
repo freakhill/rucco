@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["johan gall <johan.gall@gmail.com>"]
 
 [dependencies]
+log = "~0.3"
 syntect = "~1.0.1" # syntax highlighting
-regex = "~0.1.77" # regexp to separate code from comments
 hoedown = "~5.0.0" # markdown html rendering
+toml = "~0.2.1" # conf files
+nom = "~1.2.4" # parsing
+maud = "~0.12.0" # templates
+maud_macros = "~0.12.0"

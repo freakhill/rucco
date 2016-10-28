@@ -28,6 +28,7 @@ extern crate toml; /// for configuration files
 extern crate clap; /// "Command Line Argument Parsing" library
 extern crate walkdir; /// to... walk dirs
 extern crate rayon; /// for parallelism
+extern crate rucco_lib;
 
 use clap::{Arg, ArgMatches, App};
 use std::collections::HashMap;
@@ -41,6 +42,8 @@ use std::fs;
 use std::env;
 use walkdir::{WalkDir};
 use rayon::prelude::*;
+
+use rucco_lib::Config;
 
 /// ## Static data
 
@@ -72,14 +75,6 @@ struct Args<'a> {
     output: Option<&'a str>,
     nonrecursive: bool,
     inputs: Vec<&'a str>
-}
-
-/// This will hold our final configuration (after merging clap data and ruccofile data).
-struct Config<'a> {
-    recursive: bool,
-    entries: Vec<&'a str>,
-    output_dir: &'a str,
-    languages: &'a toml::Table
 }
 
 /// ## CLI
@@ -163,7 +158,7 @@ fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
                 toml::Value::Table(merge_confs(&basetable, &customtable)),
             (_, Some(customval)) => customval.clone(),
             (Some(baseval),_) => baseval.clone(),
-            (_,_) => panic!("wat!???")
+            (_,_) => panic!("wtf!???")
         };
         merged.insert(key.clone(), val);
     };
@@ -284,7 +279,7 @@ fn main() {
         }
     }
 
-    // checking the output dir is there before starting to fill it.
+    // checking the environment is ready to get files processed.
     ensure_dir(&PathBuf::from(config.output_dir))
         .expect("failed to ensure that output directory exists.");
 
@@ -292,6 +287,8 @@ fn main() {
     let output_dir = fs::canonicalize(config.output_dir)
         .expect("failed to canonicalize output dir path.");
 
+    // TODO: COPY RESOURCES
+    // copy_resources(&output_dir);
 
     // and now recurse files and dump shit!
     let mut dirs: Vec<PathBuf> = Vec::with_capacity(ESTIMATED_MAX_ACTIONS);
