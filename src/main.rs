@@ -27,6 +27,7 @@ extern crate env_logger; /// makes our logger configurable by environment variab
 extern crate toml; /// for configuration files
 extern crate clap; /// "Command Line Argument Parsing" library
 extern crate walkdir; /// to... walk dirs
+extern crate rayon; /// for parallelism
 
 use clap::{Arg, ArgMatches, App};
 use std::collections::HashMap;
@@ -39,13 +40,19 @@ use std::io;
 use std::fs;
 use std::env;
 use walkdir::{WalkDir};
+use rayon::prelude::*;
 
 /// ## Static data
 
 /// A *ruccofile* (toml-formated) is a configuration file for this program.
 const RUCCOFILE_NAME: &'static str = "Ruccofile.toml";
 
+/// Quic'n'dirty!
 const MAX_DEPTH: u8 = 8;
+
+/// (folders to create and files to process), if you use rucco for more than
+/// 256 of those you have a problem...
+const ESTIMATED_MAX_ACTIONS: usize = 256;
 
 /// This will be used for the command line interface.
 const ABOUT: &'static str = "
@@ -199,12 +206,9 @@ fn ensure_ruccofile_exists(config: &Config) -> Result<(), io::Error> {
 
 /// ## The function actually doing stuff
 
-/// We transform quite early paths to absolute paths so unless specifically mentionned
-/// we will be dealing with absolute paths!
-
 fn ensure_dir(path: &PathBuf) -> io::Result<()> {
     if !path.is_dir() {
-        try![fs::create_dir(path)];
+        try![fs::create_dir_all(path)];
     }
     Ok(())
 }
@@ -280,14 +284,18 @@ fn main() {
         }
     }
 
-    // and now processing!
+    // checking the output dir is there before starting to fill it.
     ensure_dir(&PathBuf::from(config.output_dir))
         .expect("failed to ensure that output directory exists.");
+
     let pwd = env::current_dir().expect("failed to get current dir!");
     let output_dir = fs::canonicalize(config.output_dir)
         .expect("failed to canonicalize output dir path.");
 
+
     // and now recurse files and dump shit!
+    let mut dirs: Vec<PathBuf> = Vec::with_capacity(ESTIMATED_MAX_ACTIONS);
+    let mut files: Vec<(PathBuf,PathBuf)> = Vec::with_capacity(ESTIMATED_MAX_ACTIONS);
     let entries = config.entries.iter()
         .filter_map(|p| fs::canonicalize(p).ok())
         .filter(|p| !p.starts_with(&output_dir))
@@ -303,21 +311,31 @@ fn main() {
                 let relative = entry.path().strip_prefix(&pwd)
                     .expect("failed to generate a relative path.");
                 if entry.path().is_dir() {
-                    ensure_dir(&output_dir.join(&relative))
-                        .expect("failed to create subdirectory in output dir.");
+                    dirs.push(output_dir.join(&relative));
                 } else {
                     let target = output_dir.join(&relative);
-                    process_file(&config, &relative, &target);
+                    files.push((relative.to_owned(), target))
                 }
             }
         }
     } else {
         for file in entries.filter(|p| p.is_file()) {
+            let parent_dir = file.parent().expect("could not get parent dir of file");
+            dirs.push(parent_dir.to_owned());
+
             let relative = file.strip_prefix(&pwd)
                 .expect("failed to generate a relative path.");
             let target = output_dir.join(&relative);
-            process_file(&config, &relative, &target);
+            files.push((relative.to_owned(), target));
         }
     }
+
+    for dir in dirs {
+        ensure_dir(&dir)
+            .expect("failed to create subdirectory in output dir.");
+    }
+
+    files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target));
+
     info!("complete!");
 }
