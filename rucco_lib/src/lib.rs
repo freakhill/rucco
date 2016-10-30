@@ -74,6 +74,14 @@ char* gororo = 'm'; // ignpre me!!!
             println!("rucco_captures_ok: {:?}", capture);
         };
     }
+
+    #[test]
+    fn into_sections_iter_ok() {
+        let r = compute_regex(create_c_language()).expect("failed to create c language regex");
+        for section in r.rucco_captures_iter(C_SAMPLE).into_sections_iter() {
+            println!("section: {:?}", section);
+        };
+    }
 }
 
 pub fn compute_regex(language: toml::Value) -> Option<Regex> {
@@ -114,14 +122,14 @@ pub fn compute_regex(language: toml::Value) -> Option<Regex> {
         .multi_line(true)
         .dot_matches_new_line(true)
         .compile() {
-        Ok(regexp) => {
-            Some(regexp)
-        },
-        Err(e) => {
-            error!("{}", e);
-            None
+            Ok(regexp) => {
+                Some(regexp)
+            },
+            Err(e) => {
+                error!("{}", e);
+                None
+            }
         }
-    }
 }
 
 #[derive(Debug,Clone)]
@@ -143,7 +151,7 @@ pub struct RuccoCaptures<'r, 't> {
 }
 
 impl<'r, 't> RuccoCaptures<'r, 't> {
-    pub fn into_section_iter(self) -> Sections<RuccoCaptures<'r, 't>> {
+    pub fn into_sections_iter(self) -> Sections<RuccoCaptures<'r, 't>> {
         Sections {
             it: self,
             current_doc: None,
@@ -162,18 +170,47 @@ impl<T: Iterator<Item=Segment>> Iterator for Sections<T> {
     type Item=Section;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(segment) = self.it.next() {
-            None
-        } else {
-            match (&mut self.current_doc, &mut self.current_code) {
-                (&mut None, &mut None) => None,
-                (mut doc, &mut None) => {
-                    let d = std::mem::replace(doc, None);
-                    Some(Section{doc: d.unwrap(), code: "".to_string()})
-                },
-                (_, _) => {
-                    error!("this should not happen...");
-                    None
+        loop {
+            if let Some(segment) = self.it.next() {
+                match (segment, &mut self.current_doc, &mut self.current_code) {
+                    (Segment::Doc(s), cd @ &mut None, &mut None) => {
+                        std::mem::replace(cd, Some(s));
+                    },
+                    (Segment::Doc(s), cd, &mut None) => {
+                        error!("doc and doc together should not happen.");
+                        return None;
+                    },
+                    (Segment::Doc(s), &mut None, cc) => {
+                        error!("doc should not happen with code and not previous doc.");
+                        return None;
+                    },
+                    (Segment::Code(s), &mut None, &mut None) => {
+                        return Some(Section{doc: String::from(""), code: s});
+                    },
+                    (Segment::Code(s), cd, &mut None) => {
+                        let doc = std::mem::replace(cd ,None).unwrap();
+                        return Some(Section{doc: doc, code: s});
+                    },
+                    (Segment::Code(s), &mut None, cc) => {
+                        error!("code and code should not happen.");
+                        return None;
+                    },
+                    (_, cd, cc) => {
+                        error!("previously failed to emit a section.");
+                        return None;
+                    },
+                }
+            } else {
+                match (&mut self.current_doc, &mut self.current_code) {
+                    (&mut None, &mut None) => { return None; },
+                    (mut doc, &mut None) => {
+                                             let d = std::mem::replace(doc, None);
+                                             return Some(Section{doc: d.unwrap(), code: "".to_string()});
+                    },
+                    (_, _) => {
+                        error!("this should not happen...");
+                        return None;
+                    }
                 }
             }
         }
