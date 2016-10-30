@@ -318,7 +318,7 @@ impl Languages {
     }
 }
 
-fn extract_sections
+fn sections
     (languages: &mut Languages, extension: &str, source: &str) -> Option<Vec<RenderedSection>> {
     if let &Some(ref regex) = languages.get(String::from(extension)) {
         Some(regex.rucco_captures_iter(source).into_sections_iter().map(render_section).collect())
