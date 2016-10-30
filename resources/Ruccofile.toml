@@ -42,7 +42,9 @@ singleline =  "#"
 [languages.cpp]
 name = "cpp"
 singleline = "//"
-multiline = ["/*", "*?", "*/" ]
+multiline_header = "/\\*+"
+multiline_footer = "\\*+/"
+multiline_margin = "\\*"
 [languages.cs]
 name = "cs"
 singleline = "//"

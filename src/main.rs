@@ -148,17 +148,17 @@ fn parse_default_conf(mut resources: HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
 }
 
 /// And this is a simple recursive function to merge configurations!
-fn merge_confs(base: &toml::Table, custom: &toml::Table) -> toml::Table {
+fn merge_tables(base: &toml::Table, custom: &toml::Table) -> toml::Table {
     let mut merged: toml::Table = BTreeMap::new();
     let keys: HashSet<&String> = base.keys().chain(custom.keys()).collect();
     for key in keys {
         let val = match (base.get(key), custom.get(key)) {
             (Some(&toml::Value::Table(ref basetable)),
              Some(&toml::Value::Table(ref customtable))) =>
-                toml::Value::Table(merge_confs(&basetable, &customtable)),
+                toml::Value::Table(merge_tables(&basetable, &customtable)),
             (_, Some(customval)) => customval.clone(),
             (Some(baseval),_) => baseval.clone(),
-            (_,_) => panic!("wtf!???")
+            (_,_) => panic!("wat!???")
         };
         merged.insert(key.clone(), val);
     };
@@ -229,7 +229,7 @@ fn main() {
         info!("no custom ruccofile: {}", e);
         BTreeMap::new()
     });
-    let conf = merge_confs(&base_conf, &custom_conf);
+    let conf = merge_tables(&base_conf, &custom_conf);
 
     let conf_input = conf.get("input").expect("malformed conf - no input")
         .as_table().expect("malformed conf - input is not a table");
