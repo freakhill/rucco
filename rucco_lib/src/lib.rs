@@ -17,6 +17,8 @@ pub mod config;
 use std::collections::BTreeMap;
 use std::path::{PathBuf};
 use regex::{Regex,RegexBuilder};
+use hoedown::{Markdown,Html,Render};
+use hoedown::renderer::html;
 
 #[cfg(test)]
 mod tests {
@@ -327,5 +329,10 @@ fn extract_sections
 }
 
 fn render_section(raw: Section) -> RenderedSection {
-    raw
+    let mut html = Html::new(html::Flags::empty(), 0);
+    let doc = Markdown::new(raw.doc.as_str());
+    RenderedSection {
+        doc: html.render(&doc).to_str().unwrap_or("<p>failed to render</p>").to_owned(),
+        code: raw.code
+    }
 }
