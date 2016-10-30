@@ -3,11 +3,13 @@
 
 #[macro_use] extern crate maud;
 #[macro_use] extern crate lazy_static;
-#[macro_use] extern crate log; /// for logging...
-extern crate toml; /// for configuration files
+#[macro_use] extern crate log;
+extern crate toml; // conf files
 extern crate regex;
+extern crate hoedown; // markdown
 
 mod section;
+use section::*;
 
 pub mod templates;
 pub mod config;
@@ -61,7 +63,7 @@ char* gororo = 'm'; // ignpre me!!!
 
     #[test]
     fn regex_parse_ok() {
-        let r = compute_regex(create_c_language()).expect("failed to create c language regex");
+        let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
         for capture in r.captures_iter(C_SAMPLE) {
             println!("regex_parse_ok: {:?}", capture);
         };
@@ -69,7 +71,7 @@ char* gororo = 'm'; // ignpre me!!!
 
     #[test]
     fn rucco_captures_ok() {
-        let r = compute_regex(create_c_language()).expect("failed to create c language regex");
+        let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
         for capture in r.rucco_captures_iter(C_SAMPLE) {
             println!("rucco_captures_ok: {:?}", capture);
         };
@@ -77,14 +79,14 @@ char* gororo = 'm'; // ignpre me!!!
 
     #[test]
     fn into_sections_iter_ok() {
-        let r = compute_regex(create_c_language()).expect("failed to create c language regex");
+        let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
         for section in r.rucco_captures_iter(C_SAMPLE).into_sections_iter() {
             println!("section: {:?}", section);
         };
     }
 }
 
-pub fn compute_regex(language: toml::Value) -> Option<Regex> {
+pub fn compute_regex(language: &toml::Value) -> Option<Regex> {
     let table = language.as_table().unwrap();
     let singleline_mark = table.get("singleline").map(|v| v.as_str().unwrap());
     let multiline_header_mark = table.get("multiline_header").map(|v| v.as_str().unwrap());
@@ -136,12 +138,6 @@ pub fn compute_regex(language: toml::Value) -> Option<Regex> {
 pub enum Segment {
     Code(String),
     Doc(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct Section {
-    doc: String,
-    code: String
 }
 
 pub struct RuccoCaptures<'r, 't> {
@@ -308,55 +304,28 @@ struct Languages {
 }
 
 impl Languages {
-    fn get(&mut self, l: String) -> Option<Regex> {
-        None
+    fn get(&mut self, l: String) -> &Option<Regex> {
+        let lang_raw_value = self.raw.get(&l);
+        let entry = self.computed.entry(l);
+        entry.or_insert_with(|| {
+            match lang_raw_value {
+                Some(ref lang) => compute_regex(lang),
+                None => None
+            }
+        })
     }
 }
 
-fn extract_segments(languages: &mut Languages, extension: &str, source: &str) -> Option<()> {
-    if let Some(regex) = languages.get(String::from(extension)) {
-        for capture in regex.rucco_captures_iter(source) {
-            println!("capture: {:?}", capture);
-        };
-        Some(())
+fn extract_sections
+    (languages: &mut Languages, extension: &str, source: &str) -> Option<Vec<RenderedSection>> {
+    if let &Some(ref regex) = languages.get(String::from(extension)) {
+        Some(regex.rucco_captures_iter(source).into_sections_iter().map(render_section).collect())
     } else {
+        warn!("could not find language for extension: {}", extension);
         None
     }
 }
 
-// fn normalize_segments(raw_segments: Iter<&Segments>) {
-//     let mut current_doc_segment: Option<DocSegment> = None;
-//     let mut current_code_segment: Option<CodeSegment> = None;
-
-//     let mut output: Vec<(DocSegment,CodeSegment)> = vec![];
-
-//     // instead of for create a new "normalizing iterator"
-//     for seg in raw_segments {
-//         match (seg, current_doc_segment, current_code_segment) {
-//             (DocSegment, None, None) => current_doc_segment <- seg,
-//             (DocSegment, Some(doc_segment), None) => mergedocsegments,
-//             (DocSegment, _, _) => panic!(""),
-//             (CodeSegment, None, None) => output.push(empty_doc.clone(), seg),
-//             (CodeSegment, Some(doc_segment), None) => output.push(doc_segment, seg),
-//             (_, _, _) => panic!(""),
-//         }
-//     }
-
-//     if let Some(doc) = current_doc_segment {
-//         output.push(doc, empty_code.clone());
-//     }
-//     output
-// }
-
-// fn render_segments(sections: Iterator<&(DocSegment, CodeSegment)>)
-//                        -> Vec<Section> {
-
-//     let sections: Vec<Section> = sections.map(|(doc, code)| {
-//         let (heading_level, heading) = extract_heading(doc);
-//         let doc_html = render_doc(doc);
-//         let code_html = render_code(code);
-//         Section{...};
-//     }).collect(); // need to count stuff...
-
-//     render_file(sections) // and use that to write a file
-// }
+fn render_section(raw: Section) -> RenderedSection {
+    raw
+}
