@@ -125,9 +125,15 @@ pub fn compute_regex(language: toml::Value) -> Option<Regex> {
 }
 
 #[derive(Debug,Clone)]
-pub enum RawSegment {
+pub enum Segment {
     Code(String),
     Doc(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct Section {
+    doc: String,
+    code: String
 }
 
 pub struct RuccoCaptures<'r, 't> {
@@ -136,27 +142,62 @@ pub struct RuccoCaptures<'r, 't> {
     current_code: Option<String>
 }
 
+impl<'r, 't> RuccoCaptures<'r, 't> {
+    pub fn into_section_iter(self) -> Sections<RuccoCaptures<'r, 't>> {
+        Sections {
+            it: self,
+            current_doc: None,
+            current_code: None
+        }
+    }
+}
+
+pub struct Sections<T: Iterator<Item=Segment>> {
+    it: T,
+    current_doc: Option<String>,
+    current_code: Option<String>
+}
+
+impl<T: Iterator<Item=Segment>> Iterator for Sections<T> {
+    type Item=Section;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(segment) = self.it.next() {
+            None
+        } else {
+            match (&mut self.current_doc, &mut self.current_code) {
+                (&mut None, &mut None) => None,
+                (mut doc, &mut None) => {
+                    let d = std::mem::replace(doc, None);
+                    Some(Section{doc: d.unwrap(), code: "".to_string()})
+                },
+                (_, _) => {
+                    error!("this should not happen...");
+                    None
+                }
+            }
+        }
+    }
+}
+
 fn append<F>(text: &str,
              growing: &mut Option<String>,
              other: &mut Option<String>,
-             f: F) -> Option<RawSegment>
-    where F: Fn(String) -> RawSegment{
+             f: F) -> Option<Segment>
+    where F: Fn(String) -> Segment{
     // append or create new code segment
-    if growing.is_some() { // wait for non lexical lifetimes....
-        growing.as_mut().unwrap().push_str(text);
-    } else {
-        std::mem::replace(growing, Some(text.to_string()));
+    match growing {
+        &mut None => {std::mem::replace(growing, Some(text.to_string()));},
+        g => {g.as_mut().unwrap().push_str(text);}
     }
-        // if we had doc in, push it out
-    if other.is_some() { // wait for non lexical lifetimes....
-            let out = std::mem::replace(other, None);
-        return Some(f(out.unwrap()));
+    match other {
+        &mut None => None,
+        o => Some(f(std::mem::replace(o, None).unwrap()))
     }
-    None
 }
 
 impl<'r, 't> Iterator for RuccoCaptures<'r, 't> {
-    type Item=RawSegment;
+    type Item=Segment;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -165,39 +206,42 @@ impl<'r, 't> Iterator for RuccoCaptures<'r, 't> {
                 match (c.name("doc_sl"),c.name("doc_ml"),c.name("doc_ml_h"),c.name("doc_ml_l"),c.name("code")) {
                     (None,None,None,None,None) => {}, // ignore
                     (Some(ref sl),_,_,_,_) => { // single comment line
-                        let maybe_return = append(sl, &mut self.current_doc, &mut self.current_code, |c| RawSegment::Code(c));
+                        let maybe_return = append(sl, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
                         if maybe_return.is_some() { return maybe_return; };
                     },
                     (_,Some(ref ml),_,_,_) => { // multiline no margin
-                        let maybe_return = append(ml, &mut self.current_doc, &mut self.current_code, |c| RawSegment::Code(c));
+                        let maybe_return = append(ml, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
                         if maybe_return.is_some() { return maybe_return; };
                     },
                     (_,_,Some(ref ml_h),Some(ref ml_l),_) => {
-                        let maybe_return = append(ml_h, &mut self.current_doc, &mut self.current_code, |c| RawSegment::Code(c));
+                        let maybe_return = append(ml_h, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
                         lazy_static! {
                             static ref ML_L_RE: Regex = Regex::new(r"(?ms)^[ \t\n]*[^ \t\n]+([^\n]*\n?)$").unwrap();
                         } // we remove the margin from the lines
                         for c in ML_L_RE.captures_iter(ml_l) {
                             if let Some(l) = c.at(1) {
-                                append(l, &mut self.current_doc, &mut self.current_code, |c| RawSegment::Code(c));
+                                append(l, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
                             }
                         }
                         if maybe_return.is_some() { return maybe_return; };
                     },
                     (_,_,_,_,Some(code)) => {
-                        let maybe_return = append(code, &mut self.current_code, &mut self.current_doc, |d| RawSegment::Doc(d));
+                        let maybe_return = append(code, &mut self.current_code, &mut self.current_doc, |d| Segment::Doc(d));
                         if maybe_return.is_some() { return maybe_return; };
                     },
-                    (_,_,_,_,_) => panic!("NYI")
+                    (_,_,_,_,_) => {
+                        error!("SOMETHING WENT WRONT WHEN AGGLOMERATING CAPTURES");
+                        return None;
+                    }
                 }
             } else {
                 if self.current_doc.is_some() {
                     let doc = std::mem::replace(&mut self.current_doc, None);
-                    return Some(RawSegment::Doc(doc.unwrap()));
+                    return Some(Segment::Doc(doc.unwrap()));
                 }
                 if self.current_code.is_some() {
                     let code = std::mem::replace(&mut self.current_code, None);
-                    return Some(RawSegment::Code(code.unwrap()));
+                    return Some(Segment::Code(code.unwrap()));
                 }
                 return None;
             }
@@ -243,7 +287,7 @@ fn extract_segments(languages: &mut Languages, extension: &str, source: &str) ->
     }
 }
 
-// fn normalize_segments(raw_segments: Iter<&RawSegments>) {
+// fn normalize_segments(raw_segments: Iter<&Segments>) {
 //     let mut current_doc_segment: Option<DocSegment> = None;
 //     let mut current_code_segment: Option<CodeSegment> = None;
 
