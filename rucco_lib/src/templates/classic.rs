@@ -1,6 +1,7 @@
 use section::Section;
 use std::path::PathBuf;
 use regex::Regex;
+use maud::PreEscaped;
 
 #[cfg(test)]
 mod tests {
@@ -102,12 +103,12 @@ pub fn render<'a,
                                                      pilwrap_level.push_str(heading_level);
                                                      pilwrap_level
                                                  }).unwrap_or(String::from(""))) } {
-                                        a.pilcrow href={ "#section" (i) } { "¶" }
+                                        a.pilcrow href={ "#section-" (i) } { "¶" }
                                     }
-                                    (section.doc)
+                                    (PreEscaped(&section.doc))
                                 }
                                 div.content {
-                                    (section.code)
+                                    (PreEscaped(&section.code))
                                 }
                             }
                         }

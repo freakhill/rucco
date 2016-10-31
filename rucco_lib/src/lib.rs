@@ -36,25 +36,26 @@ int a = 12;
 
 /* first block */
 
-// mooo mooo
+// # mooo mooo
 // moomfomfomfoof
 
 /*** kakarot
- * zozo
- * dodo
+ * - zozo
+ * - dodo
  */
 
 int b = 77;
 
 /*
-tatarot
+## tatarot
 momo
 */
 
 char* gororo = 'm'; // ignpre me!!!
 
 /*
- * moo
+ * # moo
+ * yo
 */
 
 ";
