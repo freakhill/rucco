@@ -7,6 +7,7 @@
 extern crate toml; // conf files
 extern crate regex;
 extern crate hoedown; // markdown
+extern crate syntect;
 
 mod section;
 use section::*;
@@ -19,9 +20,13 @@ use std::path::{PathBuf};
 use regex::{Regex,RegexBuilder};
 use hoedown::{Markdown,Html,Render};
 use hoedown::renderer::html;
+use syntect::parsing::SyntaxSet;
+use syntect::highlighting::{ThemeSet, Theme, self};
+use syntect::html::highlighted_snippet_for_string;
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
     use toml;
     use std::collections::BTreeMap;
     use super::*;
@@ -56,6 +61,7 @@ char* gororo = 'm'; // ignpre me!!!
 
     fn create_c_language() -> toml::Value {
         let mut c: toml::Table = BTreeMap::new();
+        c.insert("name".to_string(), toml::Value::String("C".to_string()));
         c.insert("singleline".to_string(), toml::Value::String(r"//+".to_string()));
         c.insert("multiline_header".to_string(), toml::Value::String(r"/\*+".to_string()));
         c.insert("multiline_footer".to_string(), toml::Value::String(r"\*+/".to_string()));
@@ -85,6 +91,23 @@ char* gororo = 'm'; // ignpre me!!!
         for section in r.rucco_captures_iter(C_SAMPLE).into_sections_iter() {
             println!("section: {:?}", section);
         };
+    }
+
+    #[test]
+    fn sections_ok() {
+        env_logger::init().unwrap();
+        let mut raw: toml::Table = BTreeMap::new();
+        let c = create_c_language();
+        raw.insert("c".to_string(), c);
+        let mut langs = Languages {
+            computed: BTreeMap::new(),
+            raw: raw
+        };
+        if let Some(sections) = sections(&mut langs, "c", C_SAMPLE) {
+            println!("sections: {:#?}", sections);
+        } else {
+            panic!("failed to generate sections");
+        }
     }
 }
 
@@ -300,39 +323,71 @@ impl<'r, 't> IntoRuccoCaptures<'r, 't> for regex::Regex {
 
 
 // figure out Arc, Mutex etc. afterwards
-struct Languages {
-    computed: BTreeMap<String, Option<Regex>>,
-    raw: BTreeMap<String, toml::Value>
+pub struct Languages {
+    computed: BTreeMap<String, Option<(String, Regex)>>,
+    raw: toml::Table
 }
 
 impl Languages {
-    fn get(&mut self, l: String) -> &Option<Regex> {
+    pub fn new(raw: toml::Table) -> Languages {
+        Languages {computed: BTreeMap::new(), raw: raw}
+    }
+
+    fn get(&mut self, l: String) -> &Option<(String, Regex)> {
         let lang_raw_value = self.raw.get(&l);
         let entry = self.computed.entry(l);
         entry.or_insert_with(|| {
             match lang_raw_value {
-                Some(ref lang) => compute_regex(lang),
+                Some(lang) => {
+                    let name = lang.as_table()
+                        .and_then(|t| t.get("name")).and_then(|v| v.as_str())
+                        .unwrap_or_else(|| {
+                            error!("invalid configuration,  no name defined for some extension");
+                            ""
+                        });
+                    compute_regex(lang).and_then(|r| Some((name.to_owned(), r)))
+                }
                 None => None
             }
         })
     }
 }
 
-fn sections
+pub fn sections
     (languages: &mut Languages, extension: &str, source: &str) -> Option<Vec<RenderedSection>> {
-    if let &Some(ref regex) = languages.get(String::from(extension)) {
-        Some(regex.rucco_captures_iter(source).into_sections_iter().map(render_section).collect())
+    if let &Some((ref lang, ref regex)) = languages.get(String::from(extension)) {
+        let l = lang.as_str();
+        Some(regex
+             .rucco_captures_iter(source)
+             .into_sections_iter()
+             .map(|s| render_section(l,s))
+             .collect())
     } else {
         warn!("could not find language for extension: {}", extension);
         None
     }
 }
 
-fn render_section(raw: Section) -> RenderedSection {
-    let mut html = Html::new(html::Flags::empty(), 0);
-    let doc = Markdown::new(raw.doc.as_str());
-    RenderedSection {
-        doc: html.render(&doc).to_str().unwrap_or("<p>failed to render</p>").to_owned(),
-        code: raw.code
-    }
+thread_local! {
+    static SS: SyntaxSet = SyntaxSet::load_defaults_nonewlines();
+    static TS: ThemeSet = ThemeSet::load_defaults();
+    static THEME: Theme = TS.with(|ts| ts.themes["base16-ocean.dark"].clone());
+}
+
+fn render_section(syntax_name: &str, raw: Section) -> RenderedSection {
+    let mut md_html = Html::new(html::Flags::empty(), 0);
+    let md_doc = Markdown::new(raw.doc.as_str());
+    let doc_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render</p>").to_owned();
+
+    SS.with(move |ss| {
+        if let Some(syntax_def) = ss.find_syntax_by_name(syntax_name) {
+            THEME.with(|theme| {
+                let code_html = highlighted_snippet_for_string(&raw.code, syntax_def, theme);
+                RenderedSection {doc: doc_html, code: code_html}
+            })
+        } else {
+            error!("no syntax available with name: {}", syntax_name);
+            RenderedSection {doc: doc_html, code: raw.code}
+        }
+    })
 }
