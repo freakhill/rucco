@@ -94,7 +94,7 @@ char* gororo = 'm'; // ignpre me!!!
     }
 
     #[test]
-    fn sections_ok() {
+    fn render_ok() {
         env_logger::init().unwrap();
         let mut raw: toml::Table = BTreeMap::new();
         let c = create_c_language();
@@ -103,8 +103,8 @@ char* gororo = 'm'; // ignpre me!!!
             computed: BTreeMap::new(),
             raw: raw
         };
-        if let Some(sections) = sections(&mut langs, "c", C_SAMPLE) {
-            println!("sections: {:#?}", sections);
+        if let Some(rendered) = render(&mut langs, "c", C_SAMPLE) {
+            println!("file: {:#?}", rendered);
         } else {
             panic!("failed to generate sections");
         }
@@ -353,15 +353,19 @@ impl Languages {
     }
 }
 
-pub fn sections
-    (languages: &mut Languages, extension: &str, source: &str) -> Option<Vec<RenderedSection>> {
+pub fn render
+    (languages: &mut Languages, extension: &str, source: &str) -> Option<String> {
     if let &Some((ref lang, ref regex)) = languages.get(String::from(extension)) {
         let l = lang.as_str();
-        Some(regex
+        let sections: Vec<Section> = regex
              .rucco_captures_iter(source)
              .into_sections_iter()
              .map(|s| render_section(l,s))
-             .collect())
+            .collect();
+        Some(templates::classic::render(vec![].iter(),
+                                        "/lol/css/path.css",
+                                        &std::path::PathBuf::from("/lol/source/path.c"),
+                                        sections.iter()))
     } else {
         warn!("could not find language for extension: {}", extension);
         None
