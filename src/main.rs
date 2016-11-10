@@ -35,6 +35,7 @@ use clap::{Arg, ArgMatches, App};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
+use std::ops::DerefMut;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::prelude::*;
@@ -235,12 +236,14 @@ fn process_file(config: &Config, source: &Path, target: &Path) {
         if needs_init {
             *l.borrow_mut() = Some(Languages::new(config.languages.clone()));
         }
-    // pub fn render
-    // (languages: &mut Languages,
-    //  extension: &str,
-    //  source: &str,
-    //  css_rel_path: &str) -> Option<String>
-    info!("from {} to {}", source.display(), target.display());
+        if let &mut Some(ref mut languages) = l.borrow_mut().deref_mut() {
+            // pub fn render
+            // (languages: &mut Languages,
+            //  extension: &str,
+            //  source: &str,
+            //  css_rel_path: &str) -> Option<String>
+            info!("from {} to {}", source.display(), target.display());
+        }
     });
 }
 
