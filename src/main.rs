@@ -218,7 +218,7 @@ fn ensure_dir(path: &PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn copy_resources(resources: &HashMap<Vec<u8>, Vec<u8>>,
+fn untar_resources(resources: &HashMap<Vec<u8>, Vec<u8>>,
                   output_dir: &Path,
                   pack_name: &str) -> io::Result<()> {
 
@@ -364,7 +364,7 @@ fn main() {
     files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target));
 
     // copy the css etc. resources (for now no choice!)
-    copy_resources(&resources, &output_dir, "classic.tar");
+    untar_resources(&resources, &output_dir, "classic.tar");
 
     info!("complete!");
 }
