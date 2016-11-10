@@ -13,7 +13,6 @@ mod section;
 use section::*;
 
 pub mod templates;
-pub mod config;
 
 use std::collections::BTreeMap;
 use std::path::{PathBuf};
@@ -23,6 +22,7 @@ use hoedown::renderer::html;
 use syntect::parsing::SyntaxSet;
 use syntect::highlighting::{ThemeSet, Theme, self};
 use syntect::html::highlighted_snippet_for_string;
+use tar::Archive;
 
 #[cfg(test)]
 mod tests {

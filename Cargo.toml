@@ -13,4 +13,5 @@ toml = "~0.2.1" # conf files
 embed = "~0.1.1" # embed resources in binary
 walkdir = "~0.1"
 rayon = "~0.4.3" # parallelism
+tar = "~0.4"
 rucco_lib = { path = "rucco_lib" }

@@ -43,8 +43,6 @@ use std::env;
 use walkdir::{WalkDir};
 use rayon::prelude::*;
 
-use rucco_lib::Config;
-
 /// ## Static data
 
 /// A *ruccofile* (toml-formated) is a configuration file for this program.
@@ -145,7 +143,7 @@ fn parse_conf_file(path: &str) -> Result<toml::Table, io::Error> {
 }
 
 /// This function parses the base ruccofile embedded in our binary.
-fn parse_default_conf(mut resources: HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
+fn parse_default_conf(mut resources: &mut HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
     let file_as_bytes = resources.remove("Ruccofile.toml".as_bytes())
         .expect("could not find default conf failed!??");
     let file_as_string = String::from_utf8(file_as_bytes)
@@ -234,10 +232,10 @@ fn main() {
 
     let matches = cli().get_matches();
     let args = Args::new(&matches);
-    let resources: HashMap<Vec<u8>, Vec<u8>> = embed!("resources");
+    let mut resources: HashMap<Vec<u8>, Vec<u8>> = embed!("resources");
 
     // conf
-    let base_conf = parse_default_conf(resources);
+    let base_conf = parse_default_conf(&mut resources);
     let custom_conf_path = if let Some(conf_path) = args.conf { conf_path } else { RUCCOFILE_NAME };
     let custom_conf = parse_conf_file(custom_conf_path).unwrap_or_else(|e| {
         info!("no custom ruccofile: {}", e);
