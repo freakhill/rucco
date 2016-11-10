@@ -26,8 +26,9 @@
 extern crate env_logger; /// makes our logger configurable by environment variable (eg. RUST_LOG=debug)
 extern crate toml; /// for configuration files
 extern crate clap; /// "Command Line Argument Parsing" library
-extern crate walkdir; /// to... walk dirs
+extern crate walkdir;
 extern crate rayon; /// for parallelism
+extern crate tar;
 extern crate rucco_lib;
 
 use clap::{Arg, ArgMatches, App};
@@ -40,8 +41,12 @@ use std::io::prelude::*;
 use std::io;
 use std::fs;
 use std::env;
+use std::cell::RefCell;
 use walkdir::{WalkDir};
+use tar::Archive;
 use rayon::prelude::*;
+
+use rucco_lib::{Languages, render};
 
 /// ## Static data
 
@@ -220,8 +225,23 @@ fn copy_resources(resources: &HashMap<Vec<u8>, Vec<u8>>,
     Ok(())
 }
 
+thread_local! {
+    static LANG: RefCell<Option<Languages>> = RefCell::new(None);
+}
+
 fn process_file(config: &Config, source: &Path, target: &Path) {
+    LANG.with(|l| {
+        let needs_init = l.borrow().is_none();
+        if needs_init {
+            *l.borrow_mut() = Some(Languages::new(config.languages.clone()));
+        }
+    // pub fn render
+    // (languages: &mut Languages,
+    //  extension: &str,
+    //  source: &str,
+    //  css_rel_path: &str) -> Option<String>
     info!("from {} to {}", source.display(), target.display());
+    });
 }
 
 /// ## The main function!
@@ -344,7 +364,7 @@ fn main() {
     files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target));
 
     // copy the css etc. resources (for now no choice!)
-    copy_resources(&resources, &output_dir, "classic");
+    copy_resources(&resources, &output_dir, "classic.tar");
 
     info!("complete!");
 }

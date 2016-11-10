@@ -22,7 +22,6 @@ use hoedown::renderer::html;
 use syntect::parsing::SyntaxSet;
 use syntect::highlighting::{ThemeSet, Theme, self};
 use syntect::html::highlighted_snippet_for_string;
-use tar::Archive;
 
 #[cfg(test)]
 mod tests {
@@ -104,7 +103,7 @@ char* gororo = 'm'; // ignpre me!!!
             computed: BTreeMap::new(),
             raw: raw
         };
-        if let Some(rendered) = render(&mut langs, "c", C_SAMPLE) {
+        if let Some(rendered) = render(&mut langs, "c", C_SAMPLE, "../style.css") {
             println!("file: {:#?}", rendered);
         } else {
             panic!("failed to generate sections");
@@ -355,7 +354,10 @@ impl Languages {
 }
 
 pub fn render
-    (languages: &mut Languages, extension: &str, source: &str) -> Option<String> {
+    (languages: &mut Languages,
+     extension: &str,
+     source: &str,
+     css_rel_path: &str) -> Option<String> {
     if let &Some((ref lang, ref regex)) = languages.get(String::from(extension)) {
         let l = lang.as_str();
         let sections: Vec<Section> = regex
@@ -364,7 +366,7 @@ pub fn render
              .map(|s| render_section(l,s))
             .collect();
         Some(templates::classic::render(vec![].iter(),
-                                        "/lol/css/path.css",
+                                        css_rel_path,
                                         &std::path::PathBuf::from("/lol/source/path.c"),
                                         sections.iter()))
     } else {
