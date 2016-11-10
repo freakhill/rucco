@@ -77,6 +77,13 @@ struct Args<'a> {
     inputs: Vec<&'a str>
 }
 
+struct Config<'a> {
+    recursive: bool,
+    entries: Vec<&'a str>,
+    output_dir: &'a str,
+    languages: &'a toml::Table
+}
+
 /// ## CLI
 
 /// We segragate the generation of the CLI in its own function.
@@ -208,6 +215,13 @@ fn ensure_dir(path: &PathBuf) -> io::Result<()> {
     Ok(())
 }
 
+fn copy_resources(resources: &HashMap<Vec<u8>, Vec<u8>>,
+                  output_dir: &Path,
+                  pack_name: &str) -> io::Result<()> {
+
+    Ok(())
+}
+
 fn process_file(config: &Config, source: &Path, target: &Path) {
     info!("from {} to {}", source.display(), target.display());
 }
@@ -287,9 +301,6 @@ fn main() {
     let output_dir = fs::canonicalize(config.output_dir)
         .expect("failed to canonicalize output dir path.");
 
-    // TODO: COPY RESOURCES
-    // copy_resources(&output_dir);
-
     // and now recurse files and dump shit!
     let mut dirs: Vec<PathBuf> = Vec::with_capacity(ESTIMATED_MAX_ACTIONS);
     let mut files: Vec<(PathBuf,PathBuf)> = Vec::with_capacity(ESTIMATED_MAX_ACTIONS);
@@ -333,6 +344,9 @@ fn main() {
     }
 
     files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target));
+
+    // copy the css etc. resources (for now no choice!)
+    copy_resources(&resources, &output_dir, "classic");
 
     info!("complete!");
 }
