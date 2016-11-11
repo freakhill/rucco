@@ -222,7 +222,10 @@ fn ensure_dir(path: &PathBuf) -> io::Result<()> {
 fn untar_resources(resources: &HashMap<Vec<u8>, Vec<u8>>,
                   output_dir: &Path,
                   pack_name: &str) -> io::Result<()> {
-
+    let tar_bytes = try![resources.get(pack_name.as_bytes())
+                         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not find resource tar file"))];
+    let mut tar = Archive::new(tar_bytes.as_slice());
+    try![tar.unpack(output_dir)];
     Ok(())
 }
 
@@ -366,8 +369,9 @@ fn main() {
 
     files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target));
 
-    // copy the css etc. resources (for now no choice!)
-    untar_resources(&resources, &output_dir, "classic.tar");
-
+    untar_resources(&resources, &output_dir, "classic.tar").unwrap_or_else(|e| {
+        panic!("resource extraction failed: {:?}", e);
+    });
+                                                                           ;
     info!("complete!");
 }
