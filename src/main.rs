@@ -37,6 +37,7 @@ use std::collections::HashSet;
 use std::collections::BTreeMap;
 use std::ops::DerefMut;
 use std::fs::File;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::io::prelude::*;
 use std::io;
@@ -240,12 +241,22 @@ fn process_file(config: &Config, source: &Path, target: &Path) {
             *l.borrow_mut() = Some(Languages::new(config.languages.clone()));
         }
         if let &mut Some(ref mut languages) = l.borrow_mut().deref_mut() {
-            // pub fn render
-            // (languages: &mut Languages,
-            //  extension: &str,
-            //  source: &str,
-            //  css_rel_path: &str) -> Option<String>
-            info!("from {} to {}", source.display(), target.display());
+            // source path is relative to current dir, so it's depth gives us
+            // how many times the path to css. "../../ depth times /style.css"
+            let mut css_path = String::new();
+            for _ in source.components().skip(1) {
+                css_path.push_str("../");
+            }
+            css_path.push_str("style.css");
+            if let Some(extension) = source.extension().and_then(&OsStr::to_str) {
+                if let Some(ref rendered) = render(languages, extension, source, css_path.as_str()) {
+                    info!("rendering {} to {}", source.display(), target.display());
+                } else {
+                    warn!("failed to render {}!", source.display());
+                }
+            } else {
+                info!("skipping {}...", source.display());
+            }
         }
     });
 }

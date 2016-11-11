@@ -360,15 +360,14 @@ pub fn render
      css_rel_path: &str) -> Option<String> {
     if let &Some((ref lang, ref regex)) = languages.get(String::from(extension)) {
         let l = lang.as_str();
-        let sections: Vec<Section> = regex
+        let sections = regex
              .rucco_captures_iter(source)
              .into_sections_iter()
-             .map(|s| render_section(l,s))
-            .collect();
+             .map(|s| render_section(l,s));
         Some(templates::classic::render(vec![].iter(),
                                         css_rel_path,
-                                        &std::path::PathBuf::from("/lol/source/path.c"),
-                                        sections.iter()))
+                                        &std::path::PathBuf::from(source),
+                                        sections))
     } else {
         warn!("could not find language for extension: {}", extension);
         None
