@@ -1,4 +1,4 @@
-//! # Rucco
+// # Rucco
 //! A Docco derivative in Rust (with multiline support)
 //!
 //! This is a simple program that will parse through source files
@@ -50,7 +50,7 @@ use rayon::prelude::*;
 
 use rucco_lib::{Languages, render};
 
-/// ## Static data
+// ## Static data
 
 /// A *ruccofile* (toml-formated) is a configuration file for this program.
 const RUCCOFILE_NAME: &'static str = "Ruccofile.toml";
@@ -72,7 +72,7 @@ Command line argument priority > Ruccofile priority > Base config priority.
 (The base config is embedded in the rucco binary).
 ";
 
-/// ## Structures
+// ## Structures
 
 /// This will hold the data retrieved through clap.
 struct Args<'a> {
@@ -89,7 +89,7 @@ struct Config<'a> {
     languages: &'a toml::Table
 }
 
-/// ## CLI
+// ## CLI
 
 /// We segragate the generation of the CLI in its own function.
 /// It is not too easy to add to much more processing here because
@@ -138,13 +138,13 @@ impl<'a> Args<'a> {
     }
 }
 
-/// ## Conf files
+// ## Conf files
 
 /// This function parses a ruccofile whose path is given as parameter.
 fn parse_conf_file(path: &str) -> Result<toml::Table, io::Error> {
-    let mut conf_file = try![File::open(path)];
+    let mut conf_file = File::open(path)?;
     let mut conf_string = String::new();
-    try![conf_file.read_to_string(&mut conf_string)];
+    conf_file.read_to_string(&mut conf_string)?;
     Ok(toml::Parser::new(conf_string.as_str()).parse()
        .expect("failed to parse custom ruccofile"))
 }
@@ -200,31 +200,31 @@ fn ensure_ruccofile_exists(config: &Config) -> Result<(), io::Error> {
         conf_output.insert("output".to_string(), toml::Value::Table(output));
         conf_languages.insert("languages".to_string(), toml::Value::Table(config.languages.clone()));
 
-        let mut ruccofile = try![File::create(RUCCOFILE_NAME)];
+        let mut ruccofile = File::create(RUCCOFILE_NAME)?;
         /// we do this that way only to make the final file more readable!
-        try![ruccofile.write_all(toml::encode_str(&conf_input).as_bytes())];
-        try![ruccofile.write_all("\n".as_bytes())];
-        try![ruccofile.write_all(toml::encode_str(&conf_output).as_bytes())];
-        try![ruccofile.write_all("\n".as_bytes())];
-        try![ruccofile.write_all(toml::encode_str(&conf_languages).as_bytes())];
+        ruccofile.write_all(toml::encode_str(&conf_input).as_bytes())?;
+        ruccofile.write_all("\n".as_bytes())?;
+        ruccofile.write_all(toml::encode_str(&conf_output).as_bytes())?;
+        ruccofile.write_all("\n".as_bytes())?;
+        ruccofile.write_all(toml::encode_str(&conf_languages).as_bytes())?;
     }
     Ok(())
 }
 
-/// ## The function actually doing stuff
+// ## The function actually doing stuff
 
 fn ensure_dir(path: &PathBuf) -> io::Result<()> {
     if !path.is_dir() {
-        try![fs::create_dir_all(path)];
+        fs::create_dir_all(path)?;
     }
     Ok(())
 }
 
 fn untar_resources(resources: &HashMap<Vec<u8>, Vec<u8>>,
-                  output_dir: &Path,
-                  pack_name: &str) -> io::Result<()> {
-    let tar_bytes = try![resources.get(pack_name.as_bytes())
-                         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not find resource tar file"))];
+                   output_dir: &Path,
+                   pack_name: &str) -> io::Result<()> {
+    let tar_bytes = resources.get(pack_name.as_bytes())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not find resource tar file"))?;
     let mut tar = Archive::new(tar_bytes.as_slice());
     try![tar.unpack(output_dir)];
     Ok(())
@@ -234,10 +234,11 @@ thread_local! {
     static LANG: RefCell<Option<Languages>> = RefCell::new(None);
 }
 
-fn process_file(config: &Config, source: &Path, target: &Path) {
+fn process_file(config: &Config, source: &Path, target: &Path) -> io::Result<()> {
     LANG.with(|l| {
         let needs_init = l.borrow().is_none();
         if needs_init {
+            debug!("thread local languages struct init.");
             *l.borrow_mut() = Some(Languages::new(config.languages.clone()));
         }
         if let &mut Some(ref mut languages) = l.borrow_mut().deref_mut() {
@@ -249,19 +250,35 @@ fn process_file(config: &Config, source: &Path, target: &Path) {
             }
             css_path.push_str("style.css");
             if let Some(extension) = source.extension().and_then(&OsStr::to_str) {
-                if let Some(ref rendered) = render(languages, extension, source, css_path.as_str()) {
-                    info!("rendering {} to {}", source.display(), target.display());
+                let mut source_text = String::new();
+                File::open(source)?.read_to_string(&mut source_text)?;
+                if let Some(ref rendered) = render(languages, extension, source_text.as_str(), source, css_path.as_str()) {
+                    File::create(target)?.write_all(rendered.as_bytes())?;
+                    info!("rendered {} to {}", source.display(), target.display());
                 } else {
                     warn!("failed to render {}!", source.display());
                 }
             } else {
-                info!("skipping {}...", source.display());
+                debug!("skipping {}", source.display());
             }
         }
-    });
+        Ok(())
+    })
 }
 
-/// ## The main function!
+fn htmlize(mut p: PathBuf) -> PathBuf {
+    let new_f = if let Some(f) = p.file_name() {
+        Some([f.to_str().expect("invalid path"), ".html"].concat())
+    } else {
+        None
+    };
+    if let Some(f) = new_f {
+        p.set_file_name(OsStr::new(&f));
+    };
+    p
+}
+
+// ## The main function!
 
 /// And now we put everything together.
 fn main() {
@@ -272,6 +289,7 @@ fn main() {
     let mut resources: HashMap<Vec<u8>, Vec<u8>> = embed!("resources");
 
     // conf
+    debug!("# CONF");
     let base_conf = parse_default_conf(&mut resources);
     let custom_conf_path = if let Some(conf_path) = args.conf { conf_path } else { RUCCOFILE_NAME };
     let custom_conf = parse_conf_file(custom_conf_path).unwrap_or_else(|e| {
@@ -286,6 +304,7 @@ fn main() {
         .as_table().expect("malformed conf - output is not a table");
 
     // output
+    debug!("# OUTPUT");
     let output_dir = if let Some(output) = args.output {
         output
     } else {
@@ -304,6 +323,7 @@ fn main() {
     };
 
     // inputs
+    debug!("# INPUTS");
     let entries = if args.inputs.is_empty() {
         conf_input
             .get("entries").expect("malformed conf - no input.entries")
@@ -315,6 +335,7 @@ fn main() {
     };
 
     // languages
+    debug!("# LANGUAGES");
     let languages = conf.get("languages").expect("malformed conf - no languages")
         .as_table().expect("malformed conf - languages is not a table");
 
@@ -322,6 +343,7 @@ fn main() {
                           languages: &languages };
 
     // if a ruccofile was not given as parameter, ensure a local one exists (create if necessary).
+    debug!("# RUCCOFILE");
     if let None = args.conf {
         if let Err(e) = ensure_ruccofile_exists(&config) {
             error!("failed to make sure ruccofile exists: {}", e);
@@ -329,6 +351,7 @@ fn main() {
     }
 
     // checking the environment is ready to get files processed.
+    debug!("# ENVIRONMENT");
     ensure_dir(&PathBuf::from(config.output_dir))
         .expect("failed to ensure that output directory exists.");
 
@@ -337,6 +360,8 @@ fn main() {
         .expect("failed to canonicalize output dir path.");
 
     // and now recurse files and dump shit!
+    debug!("# PROCESSING");
+    debug!("## Pushing paths");
     let mut dirs: Vec<PathBuf> = Vec::with_capacity(ESTIMATED_MAX_ACTIONS);
     let mut files: Vec<(PathBuf,PathBuf)> = Vec::with_capacity(ESTIMATED_MAX_ACTIONS);
     let entries = config.entries.iter()
@@ -354,35 +379,44 @@ fn main() {
                 let relative = entry.path().strip_prefix(&pwd)
                     .expect("failed to generate a relative path.");
                 if entry.path().is_dir() {
+                    debug!("+ dir: {}", relative.display());
                     dirs.push(output_dir.join(&relative));
                 } else {
                     let target = output_dir.join(&relative);
-                    files.push((relative.to_owned(), target))
+                    debug!("+ file: {}", relative.display());
+                    files.push((relative.to_owned(), htmlize(target)))
                 }
             }
         }
     } else {
         for file in entries.filter(|p| p.is_file()) {
             let parent_dir = file.parent().expect("could not get parent dir of file");
+            debug!("+ dir: {}", parent_dir.display());
             dirs.push(parent_dir.to_owned());
 
             let relative = file.strip_prefix(&pwd)
                 .expect("failed to generate a relative path.");
             let target = output_dir.join(&relative);
-            files.push((relative.to_owned(), target));
+            debug!("+ file: {}", relative.display());
+            files.push((relative.to_owned(), htmlize(target)));
         }
     }
 
+    debug!("## Processing dirs");
     for dir in dirs {
+        debug!("- dir: {}", dir.display());
         ensure_dir(&dir)
             .expect("failed to create subdirectory in output dir.");
     }
 
-    files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target));
+    debug!("## Processing files");
+    let mut res: Vec<io::Result<()>> = vec![];
+    files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target)).collect_into(&mut res);
 
+    debug!("## Untar resources");
     untar_resources(&resources, &output_dir, "classic.tar").unwrap_or_else(|e| {
         panic!("resource extraction failed: {:?}", e);
     });
-                                                                           ;
+    ;
     info!("complete!");
 }

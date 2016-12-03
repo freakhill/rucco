@@ -1,19 +1,19 @@
-use section::Section;
-use std::path::PathBuf;
+use section::TitleSplitSection;
+use std::path::{Path,PathBuf};
 use regex::Regex;
 use maud::PreEscaped;
 
 #[cfg(test)]
 mod tests {
     use section::Section;
-    use std::path::PathBuf;
+    use std::path::Path;
     use super::*;
 
     #[test]
     fn render_is_usable() {
         let docfiles = vec![PathBuf::from("/lol"), PathBuf::from("wut")];
         let css_path = "csspafouuu";
-        let source_path = PathBuf::from("sourcepafouuu");
+        let source_path = Path::from("sourcepafouuu");
         let sections = vec![Section{
             doc: "<h1>MAH TITLE</h1>docdocdoc".to_owned(),
             code: "codecodecdoe".to_owned()
@@ -39,21 +39,22 @@ fn heading(s: &Section) -> Option<(&str, &str)> {
 }
 
 pub fn render<'a,
-              T: Iterator<Item=&'a Section> + Clone + Sized,
+              T: Iterator<Item=&'a TitleSplitSection> + Clone + Sized,
               U: Iterator<Item=&'a PathBuf> + Clone + Sized>
     (docfiles: U,
      css_path: &'a str,
-     source_path: &'a PathBuf,
+     source_path: &'a Path,
      sections: T)
      -> String
 {
     let mut peek_sections = sections.clone().peekable();
-    if let Some(ref first_section) = peek_sections.peek() {
+    if let Some(TitleSplitSection::Title(ref t)) = peek_sections.peek() {
         let (has_title_in_first_section, title_to_use) = {
-            if let Some((_, title)) = heading(first_section) {
+            if let Some((_, title)) = heading(t.text) {
                 (true, title)
             } else {
-                (false, source_path.to_str().expect("failed to convert file path to string"))
+                (false, source_path.to_str()
+                 .expect("failed to convert file path to string"))
             }
         };
 
@@ -96,19 +97,27 @@ pub fn render<'a,
                         }
                         @for (i, section) in sections.enumerate() {
                             li id={ "section-" (i) } {
-                                div.annotation {
-                                    div class={ "pilwrap "
-                                                 (heading(section).map(|(heading_level,_)| {
-                                                     let mut pilwrap_level = String::from("for-");
-                                                     pilwrap_level.push_str(heading_level);
-                                                     pilwrap_level
-                                                 }).unwrap_or(String::from(""))) } {
-                                        a.pilcrow href={ "#section-" (i) } { "¶" }
+                                @match section {
+                                    TitleSplitSection::Title(title) => {
+                                        div.annotation {
+                                            div class={ "pilwrap for-" (t.level) } {
+                                                a.pilcrow href={ "#section-" (i) } { "¶" }
+                                            }
+                                            (PreEscaped(&title.text))
+                                        }
+                                        div.content {}
+                                    },
+                                    TitleSplitSection::Section(section) => {
+                                        div.annotation {
+                                            div class={ "pilwrap" } {
+                                                a.pilcrow href={ "#section-" (i) } { "¶" }
+                                            }
+                                            (PreEscaped(&section.doc))
+                                        }
+                                        div.content {
+                                            (PreEscaped(&section.code))
+                                        }
                                     }
-                                    (PreEscaped(&section.doc))
-                                }
-                                div.content {
-                                    (PreEscaped(&section.code))
                                 }
                             }
                         }

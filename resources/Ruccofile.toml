@@ -6,238 +6,161 @@ entries = [ "./" ]
 dir = "docs"
 
 [languages]
-[languages.applescript]
-name = "applescript"
+[languages.appleScript]
 singleline = "--"
 [languages.as]
-name = "actionscript"
 singleline = "//"
 [languages.asp]
-name = "vbscript"
 singleline = "'"
 [languages.bat]
-name = "dos"
 singleline = "@?rem"
 [languages.btm]
-name = "dos"
 singleline = "@?rem"
 [languages.c]
-name = "c"
 singleline = "//+"
 [languages.clj]
-name = "clojure"
 singleline = ";+"
 [languages.cls]
-name = "tex"
 singleline = "%"
 [languages.cmake]
-name = "cmake"
 singleline =  "#"
 [languages.cmd]
-name = "dos"
 singleline = "@?rem"
 [languages.coffee]
-name = "coffeescript"
 singleline =  "#"
 [languages.cpp]
-name = "cpp"
 singleline = "//"
 multiline_header = "/\\*+"
 multiline_footer = "\\*+/"
 multiline_margin = "\\*"
 [languages.cs]
-name = "cs"
 singleline = "//"
 [languages.cson]
-name = "coffeescript"
 singleline =  "#"
 [languages.d]
-name = "d"
 singleline = "//"
 [languages.dtx]
-name = "tex"
 singleline = "%"
 [languages.erl]
-name = "erlang"
 singleline = "%"
 [languages.frag]
-name = "glsl"
 singleline = "//"
 [languages.glsl]
-name = "glsl"
 singleline = "//"
 [languages.go]
-name = "go"
 singleline = "//"
 [languages.groovy]
-name = "groovy"
 singleline = "//"
 [languages.h]
-name = "objectivec"
 singleline = "//"
 [languages.hrl]
-name = "erlang"
 singleline = "%"
 [languages.hs]
-name = "haskell"
 singleline = "--"
 [languages.ini]
-name = "ini"
 singleline = ";"
 [languages.jade]
-name = "jade"
 singleline = "//-"
 [languages.js]
-name = "javascript"
 singleline = "//"
 [languages.jsm]
-name = "javascript"
 singleline = "//"
 [languages.jsx]
-name = "javascript"
 singleline = "//"
 [languages.java]
-name = "java"
 singleline = "//+"
 [languages.latex]
-name = "tex"
 singleline = "%"
 [languages.less]
-name = "less"
 singleline = "//"
 [languages.lisp]
-name = "lisp"
 singleline = ";"
 [languages.litcoffee]
-name = "coffeescript"
 singleline =  "#+"
 literate = true
 [languages.ls]
-name = "coffeescript"
 singleline =  "#+"
 [languages.lua]
-name = "lua"
 singleline = "--"
 [languages.n]
-name = "nemerle"
 singleline = "//"
 [languages.m]
-name = "objectivec"
 singleline = "//"
 [languages.mel]
-name = "mel"
 singleline = "//"
 [languages.markdown]
-name = "markdown"
 singleline = ""
 [languages.md]
-name = "markdown"
 singleline = ""
 [languages.mm]
-name = "objectivec"
 singleline = "//"
 [languages.p]
-name = "delphi"
 singleline = "//"
 [languages.pas]
-name = "delphi"
 singleline = "//"
 [languages.php]
-name = "php"
 singleline = "//"
 [languages.pl]
-name = "perl"
 singleline =  "#+"
 [languages.pm]
-name = "perl"
 singleline =  "#"
 [languages.pod]
-name = "perl"
 singleline =  "#"
 [languages.pp]
-name = "delphi"
 singleline = "//"
 [languages.py]
-name = "python"
 singleline =  "#+"
 [languages.rb]
-name = "ruby"
 singleline =  "#+"
 [languages.rs]
-name = "rust"
 singleline = "//[/!]?"
 [languages.scala]
-name = "scala"
 singleline = "//"
 [languages.scpt]
-name = "applescript"
 singleline = "--"
 [languages.scss]
-name = "scss"
 singleline = "//"
 [languages.sh]
-name = "bash"
 singleline =  "#"
 [languages.sql]
-name = "sql"
 singleline = "--"
 [languages.sty]
-name = "tex"
 singleline = "%"
 [languages.styl]
-name = "stylus"
 singleline = "//"
 [languages.stylus]
-name = "stylus"
 singleline = "//"
 [languages.swift]
-name = "swift"
 singleline = "//"
 [languages.t]
-name = "perl"
 singleline =  "#"
 [languages.tex]
-name = "tex"
 singleline = "%"
 [languages.ts]
-name = "typescript"
 singleline = "//"
 [languages.v]
-name = "verilog"
 singleline = "//"
 [languages.vala]
-name = "vala"
 singleline = "//"
 [languages.vapi]
-name = "vala"
 singleline = "//"
 [languages.vbe]
-name = "vbscript"
 singleline = "'"
 [languages.vbs]
-name = "vbscript"
 singleline = "'"
 [languages.vert]
-name = "glsl"
 singleline = "//"
 [languages.vhdl]
-name = "vhdl"
 singleline = "--"
 [languages.vim]
-name = "vim"
 singleline = "\""
 [languages.r]
-name = "r"
 singleline =  "#"
 [languages.toml]
-name = "toml"
 singleline =  "#+"
 [languages.wsc]
-name = "vbscript"
 singleline = "'"
 [languages.wsf]
-name = "vbscript"
 singleline = "'"
 [languages.yaml]
-name = "yaml"
 singleline =  "#"
