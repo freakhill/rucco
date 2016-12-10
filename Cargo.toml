@@ -6,12 +6,12 @@ description = "docco derivative (quic'n'dirty doc generation)"
 authors = ["johan gall <johan.gall@gmail.com>"]
 
 [dependencies]
-log = "~0.3"
-env_logger = "~0.3"
-clap = "~2.16.1" # command line argument parser
-toml = "~0.2.1" # conf files
-embed = "~0.1.1" # embed resources in binary
-walkdir = "~0.1"
-rayon = "~0.4.3" # parallelism
-tar = "~0.4"
+log = "~0"
+env_logger = "~0"
+clap = "~2" # command line argument parser
+toml = "~0" # conf files
+embed = "~0" # embed resources in binary
+walkdir = "~0"
+rayon = "~0" # parallelism
+tar = "~0"
 rucco_lib = { path = "rucco_lib" }
