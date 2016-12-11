@@ -9,13 +9,17 @@ extern crate regex;
 extern crate hoedown; // markdown
 extern crate syntect;
 
-mod section;
-use section::*;
+mod compute_regex;
+use compute_regex::compute_regex;
+
+mod segment;
+use segment::*;
 
 pub mod templates;
 
 use std::collections::BTreeMap;
 use std::path::{Path};
+use std::convert::{From,Into};
 use regex::{Regex,RegexBuilder};
 use hoedown::{Markdown,Html,Render};
 use hoedown::renderer::html;
@@ -24,192 +28,31 @@ use syntect::parsing::syntax_definition::SyntaxDefinition;
 use syntect::highlighting::{ThemeSet, Theme};
 use syntect::html::highlighted_snippet_for_string;
 
-#[cfg(test)]
-mod tests {
-    extern crate env_logger;
-    use toml;
-    use std::collections::BTreeMap;
-    use super::*;
-
-    const C_SAMPLE: &'static str = r"
-int a = 12;
-
-/* first block */
-
-// # mooo mooo
-// moomfomfomfoof
-
-/*** kakarot
- * - zozo
- * - dodo
- */
-
-int b = 77;
-
-/*
-## tatarot
-momo
-*/
-
-char* gororo = 'm'; // ignpre me!!!
-
-/*
- * # moo
- * yo
-*/
-
-";
-
-    fn create_c_language() -> toml::Value {
-        let mut c: toml::Table = BTreeMap::new();
-        c.insert("name".to_string(), toml::Value::String("C".to_string()));
-        c.insert("singleline".to_string(), toml::Value::String(r"//+".to_string()));
-        c.insert("multiline_header".to_string(), toml::Value::String(r"/\*+".to_string()));
-        c.insert("multiline_footer".to_string(), toml::Value::String(r"\*+/".to_string()));
-        c.insert("multiline_margin".to_string(), toml::Value::String(r"\*+".to_string()));
-        toml::Value::Table(c)
-    }
-
-    #[test]
-    fn regex_parse_ok() {
-        let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
-        for capture in r.captures_iter(C_SAMPLE) {
-            println!("regex_parse_ok: {:?}", capture);
-        };
-    }
-
-    #[test]
-    fn rucco_captures_ok() {
-        let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
-        for capture in r.rucco_captures_iter(C_SAMPLE) {
-            println!("rucco_captures_ok: {:?}", capture);
-        };
-    }
-
-    #[test]
-    fn into_sections_iter_ok() {
-        let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
-        for section in r.rucco_captures_iter(C_SAMPLE).into_sections_iter() {
-            println!("section: {:?}", section);
-        };
-    }
-
-    #[test]
-    fn render_ok() {
-        env_logger::init().unwrap();
-        let mut raw: toml::Table = BTreeMap::new();
-        let c = create_c_language();
-        raw.insert("c".to_string(), c);
-        let mut langs = Languages {
-            computed: BTreeMap::new(),
-            raw: raw
-        };
-        if let Some(rendered) = render(&mut langs, "c", C_SAMPLE, "../style.css") {
-            println!("file: {:#?}", rendered);
-        } else {
-            panic!("failed to generate sections");
-        }
-    }
-}
-
-pub fn compute_regex(language: &toml::Value) -> Option<Regex> {
-    let table = language.as_table().unwrap();
-    let singleline_mark = table.get("singleline")
-        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
-    let multiline_header_mark = table.get("multiline_header")
-        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
-    let multiline_footer_mark = table.get("multiline_footer")
-        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
-    let multiline_margin_mark = table.get("multiline_margin")
-        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
-
-    let mut regexp_vec: Vec<String> = Vec::new();
-    regexp_vec.push("(?:".to_string()); // global group
-    regexp_vec.push(r"(?:\n+)|".to_string()); // empty lines
-    if let Some(sl) = singleline_mark {
-        // singleline
-        regexp_vec.push([r"(?:",
-                         r"^[ \t]*", sl, r" ?",
-                         r"(?:(?P<doc_sl>[^\n]*\n?)\n*",
-                         r")|"].concat());
-    };
-    if let (Some(mh), Some(mf), Some(mm)) = (multiline_header_mark, multiline_footer_mark, multiline_margin_mark) {
-        // multiline with margin
-        regexp_vec.push([r"(?:",
-                         r"^[ \t]*", mh, r"(?P<doc_ml_h>[^\n]*\n?)\n*", // header and potential doc there
-                         r"(?P<doc_ml_l>(?:[ \t]*", mm, r"[^\n]*\n*)*[ \t]*)", mf, // lines
-                         r")|"].concat());
-        // this is far from foolproof but i do not want to support code nasty enough to break
-    };
-    if let (Some(mh), Some(mf)) = (multiline_header_mark, multiline_footer_mark) {
-        // multiline without margin
-        regexp_vec.push([r"(?:",
-                         r"^[ \t]*", mh, r"(?P<doc_ml>.*?)", mf,
-                         r")|"].concat());
-    };
-    regexp_vec.push(r"(?:^(?P<code>[^\n]*\n?)\n*)".to_string()); // codeline
-    regexp_vec.push(r")".to_string()); // global group end and repeat
-
-    let final_regexp = regexp_vec.concat();
-    match RegexBuilder::new(&final_regexp)
-        .multi_line(true)
-        .dot_matches_new_line(true)
-        .compile() {
-            Ok(regexp) => Some(regexp),
-            Err(e) => {
-                error!("Failed to build regex from language {:?}: {}", language, e);
-                None
-            }
-        }
-}
-
-#[derive(Debug,Clone)]
-pub enum Segment {
-    Title(String,u8),
-    Code(String),
-    Doc(String),
-}
-
-pub struct RuccoCaptures<'r, 't> {
+/// Iterator<Item=Option<Segment>>
+pub struct Segments<'r, 't> {
+    /// our regex captures that split doc from code
     fc: regex::FindCaptures<'r, 't>,
-    current_doc: Option<String>,
-    current_code: Option<String>
+    /// necessary for splitting multilines into titles and doc lines
+    multiline_doc_fc: Option<regex::FindCaptures<'r, 't>>
 }
 
-impl<'r, 't> RuccoCaptures<'r, 't> {
-    pub fn into_sections_iter(self) -> Sections<RuccoCaptures<'r, 't>> {
-        Sections {
-            it: self,
-            current_doc: None,
-            current_code: None
-        }
+/// Iterator<Item=Segment>
+/// also merge segments
+pub struct CompactSegments<'r, 't> {
+    segments: Segments<'r, 't>
+}
+
+impl<'r, 't> From<Segments<'r, 't>> for CompactSegments<'r, 't> {
+    fn from(segments: Segments<'r, 't>) -> Self {
+        CompactSegments { segments: self }
     }
 }
 
-pub struct Sections<T: Iterator<Item=Segment>> {
-    it: T,
-    current_doc: Option<String>,
-    current_code: Option<String>
-}
+impl<'r, 't> Iterator for CompactSegments<'r, 't> {
+    type Item=Segment;
 
-pub struct TitleSplitSections<T: Iterator<Item=Section>> {
-    it: T,
-    current_doc: Option<String>,
-    current_code: Option<String>
-}
-
-impl<T: Iterator<Item=Segment>> Iterator for Sections<T> {
-    type Item=Section;
-
-    fn title_split(mut self) -> TitleSplitSections<Self> {
-        TitleSplitSections {
-            it: self,
-            current_doc: None,
-            current_code: None
-        }
-    }
-
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Segment> {
+        // change all og this to use 1 buffered extensible segment
         loop {
             if let Some(segment) = self.it.next() {
                 match (segment, &mut self.current_doc, &mut self.current_code) {
@@ -244,8 +87,8 @@ impl<T: Iterator<Item=Segment>> Iterator for Sections<T> {
                 match (&mut self.current_doc, &mut self.current_code) {
                     (&mut None, &mut None) => { return None; },
                     (mut doc, &mut None) => {
-                                             let d = std::mem::replace(doc, None);
-                                             return Some(Section{doc: d.unwrap(), code: "".to_string()});
+                        let d = std::mem::replace(doc, None);
+                        return Some(Section{doc: d.unwrap(), code: "".to_string()});
                     },
                     (_, _) => {
                         error!("this should not happen...");
@@ -257,36 +100,14 @@ impl<T: Iterator<Item=Segment>> Iterator for Sections<T> {
     }
 }
 
-impl<T: Iterator<Item=Section>> Iterator for TitleSplitSections<T> {
-    type Item=TitleSplitSection;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        None
-    }
-}
-
-fn append<F>(text: &str,
-             growing: &mut Option<String>,
-             other: &mut Option<String>,
-             f: F) -> Option<Segment>
-    where F: Fn(String) -> Segment{
-    // append or create new code segment
-    match growing {
-        &mut None => {std::mem::replace(growing, Some(text.to_string()));},
-        g => {
-            let mut growing_string = g.as_mut().unwrap();
-            growing_string.push_str(text);
-        }
-    }
-    match other {
-        &mut None => None,
-        o => Some(f(std::mem::replace(o, None).unwrap()))
-    }
-}
-
 lazy_static! {
-    static ref ML_L_RE: Regex =
-        RegexBuilder::new(r"^[ \t\n]*[^ \t\n]+([^\n]*\n?)$")
+    static ref ML_MARGIN_L_RE: Regex =
+        RegexBuilder::new(r"^[ \t\n]*[^ \t\n]+ ?([^\n]*\n?)$")
+        .multi_line(true)
+        .dot_matches_new_line(true)
+        .compile().expect("Wrong multiline split regexp");
+    static ref ML_NOMARGIN_L_RE: Regex =
+        RegexBuilder::new(r"^[\n\t]*([^\n]*\n?)$")
         .multi_line(true)
         .dot_matches_new_line(true)
         .compile().expect("Wrong multiline split regexp");
@@ -297,74 +118,68 @@ lazy_static! {
         .compile().expect("Wrong title split regexp!");
 }
 
-fn extract_title()
 
-impl<'r, 't> Iterator for RuccoCaptures<'r, 't> {
-    type Item=Segment;
+impl<'r, 't> Iterator for Segments<'r, 't> {
+    type Item=Option<Segment>;
+
+    fn title_or_doc_segment(&mut self, line: &'t str) -> Segment {
+        if let Some(heading_capture) = TITLE_SPLIT_RE.captures_iter(line).first() {
+            Segment::Title((heading_capture.length(), line.toString()))
+        } else {
+            Segment::Doc(line.toString())
+        }
+    }
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let capture = self.fc.next(); // capture
+        if let Some(bm) = self.multiline_doc_fc {
+            /// in multiline doc context
+            if let Some(c) = bm.next() {
+                if let Some(l) = c.at(1) {
+                    Some(title_or_doc_segment(l))
+                } else {
+                    Some(None)
+                }
+            } else {
+                self.multiline_doc_fc = None;
+                Some(None)
+            }
+        } else {
+            /// primary context
+            let capture = self.fc.next();
             if let Some(c) = capture {
                 match (c.name("doc_sl"),c.name("doc_ml"),c.name("doc_ml_h"),c.name("doc_ml_l"),c.name("code")) {
-                    (None,None,None,None,None) => {}, // ignore
-                    (Some(ref sl),_,_,_,_) => { // single comment line
-                        //if Some(capture) = TITLE_SPLIT_RE.captures_iter(sl).first()
-                        let maybe_return = append(sl, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
-                        if maybe_return.is_some() { return maybe_return; };
-                    },
+                    (None,None,None,None,None) => Some(None), // ignore
+                    (Some(ref sl),_,_,_,_) => // single comment line
+                        Some(title_or_doc_segment(sl)),
                     (_,Some(ref ml),_,_,_) => { // multiline no margin
-                        let maybe_return = append(ml, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
-                        if maybe_return.is_some() { return maybe_return; };
+                        self.multiline_doc_fc = Some(ML_NOMARGIN_L_RE.captures_iter(ml));
+                        Some(None)
                     },
-                    (_,_,Some(ref ml_h),Some(ref ml_l),_) => {
-                        let maybe_return = append(ml_h, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
-                         // we remove the margin from the lines
-                        for c in ML_L_RE.captures_iter(ml_l) {
-                            if let Some(l) = c.at(1) {
-                                append(l, &mut self.current_doc, &mut self.current_code, |c| Segment::Code(c));
-                            }
-                        }
-                        if maybe_return.is_some() { return maybe_return; };
+                    (_,_,Some(ref ml_h),Some(ref ml_l),_) => { // multiline with margin
+                        self.multiline_doc_fc = Some(ML_MARGIN_L_RE.captures_iter(ml_l));
+                        Some(title_or_doc_segment(ml_h))
                     },
-                    (_,_,_,_,Some(code)) => {
-                        let maybe_return = append(code, &mut self.current_code, &mut self.current_doc, |d| Segment::Doc(d));
-                        if maybe_return.is_some() { return maybe_return; };
-                    },
+                    (_,_,_,_,Some(code)) =>  // code
+                        Some(Segment::Code(code)),
                     (_,_,_,_,_) => {
-                        error!("SOMETHING WENT WRONT WHEN AGGLOMERATING CAPTURES");
-                        return None;
+                        error!("Something went wrong when processing Segments");
+                        None
                     }
                 }
             } else {
-                if self.current_doc.is_some() {
-                    let doc = std::mem::replace(&mut self.current_doc, None);
-                    return Some(Segment::Doc(doc.unwrap()));
-                }
-                if self.current_code.is_some() {
-                    let code = std::mem::replace(&mut self.current_code, None);
-                    return Some(Segment::Code(code.unwrap()));
-                }
-                return None;
+                None
             }
         }
     }
 }
 
-pub trait IntoRuccoCaptures<'r, 't> {
-    fn rucco_captures_iter(&'r self, &'t str) -> RuccoCaptures<'r, 't>;
-}
-
-impl<'r, 't> IntoRuccoCaptures<'r, 't> for regex::Regex {
-    fn rucco_captures_iter(&'r self, source: &'t str) -> RuccoCaptures<'r, 't> {
-        RuccoCaptures {
-            fc: self.captures_iter(source),
-            current_doc: None,
-            current_code: None
-        }
+pub fn segments<'r, 't>(r: &'r regex::Regex, source: &'t str)
+                        -> Segments<'r, 't> {
+    Segments {
+        fc: r.captures_iter(source),
+        multiline_doc_fc: None
     }
 }
-
 
 // figure out Arc, Mutex etc. afterwards
 pub struct Languages {
@@ -389,10 +204,42 @@ impl Languages {
     }
 }
 
+/// ----------------------------------------------------------------------------
+/// Rendering a segment
+
 thread_local! {
-    static SS: SyntaxSet = SyntaxSet::load_defaults_nonewlines();
-    static TS: ThemeSet = ThemeSet::load_defaults();
-    static THEME: Theme = TS.with(|ts| ts.themes["base16-ocean.dark"].clone());
+    static THEME_SET: ThemeSet = ThemeSet::load_defaults();
+    static THEME: Theme = THEME_SET.with(|ts| ts.themes["base16-ocean.dark"].clone());
+}
+
+fn render_segment(syntax_def: &SyntaxDefinition, segment: Segment) -> RenderedSegment {
+    let mut md_html = Html::new(html::Flags::empty(), 0);
+
+    match segment {
+        Segment::Title((h, title)) => {
+            let md_doc = Markdown::new(title.as_str());
+            let title_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render</p>").to_owned();
+            Segment::Title((h, title_html))
+        },
+        Segment::Doc(doc) => {
+            let md_doc = Markdown::new(doc.as_str());
+            let doc_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render</p>").to_owned();
+            Segment::Doc(doc_html)
+        },
+        Segment::Code(code) => {
+            THEME.with(move |theme| {
+                let code_html = highlighted_snippet_for_string(&code, syntax_def, theme);
+                Segment::Code(code_html)
+            })
+        }
+    }
+}
+
+/// ----------------------------------------------------------------------------
+/// Rendering a source file
+
+thread_local! {
+    static SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_nonewlines();
 }
 
 pub fn render
@@ -402,14 +249,12 @@ pub fn render
      source_path: &Path,
      css_rel_path: &str) -> Option<String>
 {
-    SS.with(|ss| {
+    SYNTAX_SET.with(|ss| {
         if let Some(syntax_def) = ss.find_syntax_by_extension(extension) {
             if let &Some(ref regex) = languages.get(extension) {
-                let sections: Vec<Section> = regex
-                    .rucco_captures_iter(source_text)
-                    .into_sections_iter()
-                    .title_split()
-                    .map(|s| render_section(syntax_def,s)).collect();
+                let sections: Vec<Segment> =
+                    CompactSegments::from(segments(regex, source_text))
+                    .map(|s| render_segment(syntax_def,s)).collect();
                 Some(templates::classic::render(vec![].iter(),
                                                 css_rel_path,
                                                 source_path,
@@ -425,28 +270,22 @@ pub fn render
     })
 }
 
-fn render_section(syntax_def: &SyntaxDefinition, raw: TitleSplitSection) -> RenderedTitleSplitSection {
-    let mut md_html = Html::new(html::Flags::empty(), 0);
-
-    match raw {
-        TitleSplitSection::Title(t) => {
-            let md_doc = Markdown::new(t.text.as_str());
-            let title_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render</p>").to_owned();
-            RenderedTitleSplitSection::Title(Title {
-                text: title_html,
-                level: t.level
-            })
-        },
-        TitleSplitSection::Section(s) => {
-            let md_doc = Markdown::new(s.doc.as_str());
-            let doc_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render</p>").to_owned();
-            THEME.with(move |theme| {
-                let code_html = highlighted_snippet_for_string(&s.code, syntax_def, theme);
-                RenderedTitleSplitSection::Section(Section {
-                    doc: doc_html,
-                    code: code_html
-                })
-            })
-        }
-    }
-}
+// fn append<F>(new_segment: Segment,
+//              buffered_segment: &mut Segment
+//              //growing: &mut Option<String>,
+//              //other: &mut Option<String>,
+//              f: F) -> Segment
+//     where F: Fn(String) -> Segment{
+//     // append or create new code segment
+//     match growing {
+//         &mut None => {std::mem::replace(growing, Some(text.to_string()));},
+//         g => {
+//             let mut growing_string = g.as_mut().unwrap();
+//             growing_string.push_str(text);
+//         }
+//     }
+//     match other {
+//         &mut None => None,
+//         o => Some(f(std::mem::replace(o, None).unwrap()))
+//     }
+// }
