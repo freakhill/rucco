@@ -1,6 +1,5 @@
 use segment::RenderedSegment;
 use std::path::{Path,PathBuf};
-use regex::Regex;
 use maud::PreEscaped;
 
 // #[cfg(test)]
@@ -33,13 +32,14 @@ pub fn render<'a,
      -> String
 {
     let mut peek_segments = segments.clone().peekable();
-    let (has_global_title, title_to_use) =
-        if let Some(&&RenderedSegment::Title((h, t))) = peek_segments.peek() {
+    let (has_global_title, title_to_use): (bool, String) =
+        if let Some(&&RenderedSegment::Title((_, ref t))) = peek_segments.peek() {
             // lord why god lord why && t_t...
-            (true, t.as_str())
+            (true, t.as_str().to_owned())
         } else {
             (false, source_path.to_str()
-             .expect("failed to convert file path to string"))
+             .expect("failed to convert file path to string")
+             .to_owned())
         };
 
     let docfiles_count = docfiles.clone().count();
@@ -82,7 +82,7 @@ pub fn render<'a,
                     @for (i, segment) in segments.enumerate() {
                         li id={ "segment-" (i) } {
                             @match segment {
-                                &RenderedSegment::Title((level,html)) => {
+                                &RenderedSegment::Title((ref level,ref html)) => {
                                     div.annotation {
                                         div class={ "pilwrap for-" (level) } {
                                             a.pilcrow href={ "#segment-" (i) } { "¶" }
@@ -91,7 +91,7 @@ pub fn render<'a,
                                     }
                                     div.content {}
                                 },
-                                &RenderedSegment::Code(doc) => {
+                                &RenderedSegment::Doc(ref doc) => {
                                     div.annotation {
                                         div class={ "pilwrap" } {
                                             a.pilcrow href={ "#segment-" (i) } { "¶" }
@@ -99,7 +99,7 @@ pub fn render<'a,
                                     }
                                     (PreEscaped(&doc))
                                 },
-                                &RenderedSegment::Code(code) => {
+                                &RenderedSegment::Code(ref code) => {
                                     div.content {
                                         (PreEscaped(&code))
                                     }

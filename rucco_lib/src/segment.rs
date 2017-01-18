@@ -12,15 +12,19 @@ pub enum Segment {
 pub use segment::Segment as RenderedSegment;
 
 pub fn extract_segments<'r, 't>(r: &'r regex::Regex, source: &'t str)
-                                -> impl Iterator<Item=Segment>+'r+'t
-//ExtractCompactSegments<'r, 't>
+                                -> //impl Iterator<Item=Segment>+'r+'t
+ExtractCompactSegments<'r, 't>
 {
-    ExtractCompactSegments {
-        segments: ExtractSegments {
+    let sparse_segment_iterator: ExtractSegments<'r, 't> =
+        ExtractSegments {
             code_and_doc_captures: r.captures_iter(source),
             title_and_doc_in_multiline_capture: None
-        }
-    }
+        };
+
+    let dense_segment_iterator: ExtractCompactSegments<'r, 't> =
+        ExtractCompactSegments { segments: sparse_segment_iterator };
+
+    dense_segment_iterator
 }
 
 // -----------------------------------------------------------------------------
@@ -130,45 +134,55 @@ impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
     type Item=Option<Segment>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(bm) = self.title_and_doc_in_multiline_capture {
-            // in multiline doc context
-            if let Some(c) = bm.next() {
-                if let Some(l) = c.get(1) {
-                    Some(Some(title_or_doc_segment(l.as_str())))
+
+        let mut drop_current_multiline_capture = false;
+
+        let segment =
+            if let Some(ref mut bm) = self.title_and_doc_in_multiline_capture {
+                // in multiline doc context
+                if let Some(c) = bm.next() {
+                    if let Some(l) = c.get(1) {
+                        Some(Some(title_or_doc_segment(l.as_str())))
+                    } else {
+                        Some(None)
+                    }
                 } else {
+                    drop_current_multiline_capture = true; // hope we can drop that when MIR is online
                     Some(None)
                 }
             } else {
-                self.title_and_doc_in_multiline_capture = None;
-                Some(None)
-            }
-        } else {
-            // primary context
-            let capture = self.code_and_doc_captures.next();
-            if let Some(c) = capture {
-                match (c.name("doc_sl"),c.name("doc_ml"),c.name("doc_ml_h"),c.name("doc_ml_l"),c.name("code")) {
-                    (None,None,None,None,None) => Some(None), // ignore
-                    (Some(sl),_,_,_,_) => // single comment line
-                        Some(Some(title_or_doc_segment(sl.as_str()))),
-                    (_,Some(ml),_,_,_) => { // multiline no margin
-                        self.title_and_doc_in_multiline_capture = Some(ML_NOMARGIN_L_RE.captures_iter(ml.as_str()));
-                        Some(None)
-                    },
-                    (_,_,Some(ml_h),Some(ml_l),_) => { // multiline with margin
-                        self.title_and_doc_in_multiline_capture = Some(ML_MARGIN_L_RE.captures_iter(ml_l.as_str()));
-                        Some(Some(title_or_doc_segment(ml_h.as_str())))
-                    },
-                    (_,_,_,_,Some(code)) =>  // code
-                        Some(Some(Segment::Code(code.as_str().to_owned()))),
-                    (_,_,_,_,_) => {
-                        error!("Something went wrong when processing ExtractSegments");
-                        None
+                // primary context
+                let capture = self.code_and_doc_captures.next();
+                if let Some(c) = capture {
+                    match (c.name("doc_sl"),c.name("doc_ml"),c.name("doc_ml_h"),c.name("doc_ml_l"),c.name("code")) {
+                        (None,None,None,None,None) => Some(None), // ignore
+                        (Some(sl),_,_,_,_) => // single comment line
+                            Some(Some(title_or_doc_segment(sl.as_str()))),
+                        (_,Some(ml),_,_,_) => { // multiline no margin
+                            self.title_and_doc_in_multiline_capture = Some(ML_NOMARGIN_L_RE.captures_iter(ml.as_str()));
+                            Some(None)
+                        },
+                        (_,_,Some(ml_h),Some(ml_l),_) => { // multiline with margin
+                            self.title_and_doc_in_multiline_capture = Some(ML_MARGIN_L_RE.captures_iter(ml_l.as_str()));
+                            Some(Some(title_or_doc_segment(ml_h.as_str())))
+                        },
+                        (_,_,_,_,Some(code)) =>  // code
+                            Some(Some(Segment::Code(code.as_str().to_owned()))),
+                        (_,_,_,_,_) => {
+                            error!("Something went wrong when processing ExtractSegments");
+                            None
+                        }
                     }
+                } else {
+                    None
                 }
-            } else {
-                None
-            }
+            };
+
+        if drop_current_multiline_capture {
+            self.title_and_doc_in_multiline_capture = None;
         }
+
+        segment
     }
 }
 
