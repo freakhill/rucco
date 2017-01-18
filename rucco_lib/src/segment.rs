@@ -1,3 +1,7 @@
+use regex;
+use std::mem;
+use regex::{Regex,RegexBuilder};
+
 #[derive(Debug,Clone)]
 pub enum Segment {
     Title((u8, String)), // "## lol" -> (2, "## lol")
@@ -11,7 +15,7 @@ impl Segment {
     // extend a segment with new data and return Empty
     // OR
     // replace a segment with new data and return the old segment
-    fn push(&mut self, s: Segment) => Option<Segment> {
+    fn push(&mut self, s: Segment) -> Option<Segment> {
         match (self, s) {
             (_, Segment::Empty) => Segment::Empty,
             (Segment::Empty, _) => {
@@ -19,15 +23,16 @@ impl Segment {
                 // ...
                 None
             },
-            (mut ref Segment::Title(_), Segment::Title(_)) => {
+            (ref mut Segment::Title(_), Segment::Title(_)) => {
                 error!("two title segments with nothing in between!??");
                 None
             },
-            (mut ref Segment::Code(c), Segment::Code(cc)) => {
+            (ref mut Segment::Code(c), Segment::Code(cc)) => {
             },
-            (mut ref Segment::Doc(d), Segment::Doc(dd)) => {
+            (ref mut Segment::Doc(d), Segment::Doc(dd)) => {
             },
-            (mut ref a, b) => {
+            (ref mut a, b) => {
+                panic!("lol");
                 // replace b by a and return a
             }
         }
@@ -141,7 +146,7 @@ impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(bm) = self.multiline_doc_fc {
-            /// in multiline doc context
+            // in multiline doc context
             if let Some(c) = bm.next() {
                 if let Some(l) = c.at(1) {
                     Some(title_or_doc_segment(l))
@@ -153,7 +158,7 @@ impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
                 Some(None)
             }
         } else {
-            /// primary context
+            // primary context
             let capture = self.fc.next();
             if let Some(c) = capture {
                 match (c.name("doc_sl"),c.name("doc_ml"),c.name("doc_ml_h"),c.name("doc_ml_l"),c.name("code")) {

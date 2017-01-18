@@ -1,4 +1,5 @@
-use compute_regex::compute_regex;
+use std::collections::BTreeMap;
+use regex::{Regex,RegexBuilder};
 
 // figure out Arc, Mutex etc. afterwards
 pub struct Languages {
@@ -21,4 +22,55 @@ impl Languages {
             }
         })
     }
+}
+
+pub fn compute_regex(language: &toml::Value) -> Option<Regex> {
+    let table = language.as_table().unwrap();
+    let singleline_mark = table.get("singleline")
+        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
+    let multiline_header_mark = table.get("multiline_header")
+        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
+    let multiline_footer_mark = table.get("multiline_footer")
+        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
+    let multiline_margin_mark = table.get("multiline_margin")
+        .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
+
+    let mut regexp_vec: Vec<String> = Vec::new();
+    regexp_vec.push("(?:".to_string()); // global group
+    regexp_vec.push(r"(?:\n+)|".to_string()); // empty lines
+    if let Some(sl) = singleline_mark {
+        // singleline
+        regexp_vec.push([r"(?:",
+                         r"^[ \t]*", sl, r" ?",
+                         r"(?:(?P<doc_sl>[^\n]*\n?)\n*",
+                         r")|"].concat());
+    };
+    if let (Some(mh), Some(mf), Some(mm)) = (multiline_header_mark, multiline_footer_mark, multiline_margin_mark) {
+        // multiline with margin
+        regexp_vec.push([r"(?:",
+                         r"^[ \t]*", mh, r"(?P<doc_ml_h>[^\n]*\n?)\n*", // header and potential doc there
+                         r"(?P<doc_ml_l>(?:[ \t]*", mm, r"[^\n]*\n*)*[ \t]*)", mf, // lines
+                         r")|"].concat());
+        // this is far from foolproof
+    };
+    if let (Some(mh), Some(mf)) = (multiline_header_mark, multiline_footer_mark) {
+        // multiline without margin
+        regexp_vec.push([r"(?:",
+                         r"^[ \t]*", mh, r"(?P<doc_ml>.*?)", mf,
+                         r")|"].concat());
+    };
+    regexp_vec.push(r"(?:^(?P<code>[^\n]*\n?)\n*)".to_string()); // codeline
+    regexp_vec.push(r")".to_string()); // global group end and repeat
+
+    let final_regexp = regexp_vec.concat();
+    match RegexBuilder::new(&final_regexp)
+        .multi_line(true)
+        .dot_matches_new_line(true)
+        .compile() {
+            Ok(regexp) => Some(regexp),
+            Err(e) => {
+                error!("Failed to build regex from language {:?}: {}", language, e);
+                None
+            }
+        }
 }

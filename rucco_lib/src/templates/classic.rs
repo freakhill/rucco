@@ -1,4 +1,4 @@
-use segment::RenderedSection;
+use segment::RenderedSegment;
 use std::path::{Path,PathBuf};
 use regex::Regex;
 use maud::PreEscaped;

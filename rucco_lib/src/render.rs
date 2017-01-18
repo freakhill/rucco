@@ -1,5 +1,10 @@
 use segment::*;
 
+use syntect::parsing::SyntaxSet;
+use syntect::parsing::syntax_definition::SyntaxDefinition;
+use syntect::highlighting::{ThemeSet, Theme};
+use syntect::html::highlighted_snippet_for_string;
+
 /// ----------------------------------------------------------------------------
 /// Rendering a segment
 

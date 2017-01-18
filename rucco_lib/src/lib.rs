@@ -10,7 +10,6 @@ extern crate hoedown; // markdown
 extern crate syntect;
 
 mod segment;
-mod compute_regex;
 mod languages;
 
 pub mod templates;
@@ -19,15 +18,9 @@ pub mod render;
 pub use languages::Languages;
 pub use render::render;
 
-use std::collections::BTreeMap;
 use std::path::{Path};
-use regex::{Regex,RegexBuilder};
 use hoedown::{Markdown,Html,Render};
 use hoedown::renderer::html;
-use syntect::parsing::SyntaxSet;
-use syntect::parsing::syntax_definition::SyntaxDefinition;
-use syntect::highlighting::{ThemeSet, Theme};
-use syntect::html::highlighted_snippet_for_string;
 
 // fn append<F>(new_segment: Segment,
 //              buffered_segment: &mut Segment
