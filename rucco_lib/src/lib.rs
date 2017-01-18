@@ -1,4 +1,5 @@
 #![feature(plugin)]
+#![feature(conservative_impl_trait)]
 #![plugin(maud_macros)]
 
 #[macro_use] extern crate maud;

@@ -1,5 +1,5 @@
 use regex;
-use std::mem;
+use std;
 use regex::{Regex,RegexBuilder};
 
 #[derive(Debug,Clone)]
@@ -9,35 +9,49 @@ pub enum Segment {
     Doc(String)
 }
 
-pub type RenderedSegment = Segment;
+pub use segment::Segment as RenderedSegment;
 
-impl Segment {
-    // extend a segment with new data and return Empty
-    // OR
-    // replace a segment with new data and return the old segment
-    fn push(&mut self, s: Segment) -> Option<Segment> {
-        match (self, s) {
-            (_, Segment::Empty) => Segment::Empty,
-            (Segment::Empty, _) => {
-                // replace stuff
-                // ...
-                None
-            },
-            (ref mut Segment::Title(_), Segment::Title(_)) => {
-                error!("two title segments with nothing in between!??");
-                None
-            },
-            (ref mut Segment::Code(c), Segment::Code(cc)) => {
-            },
-            (ref mut Segment::Doc(d), Segment::Doc(dd)) => {
-            },
-            (ref mut a, b) => {
-                panic!("lol");
-                // replace b by a and return a
-            }
+pub fn extract_segments<'r, 't>(r: &'r regex::Regex, source: &'t str)
+                                -> impl Iterator<Item=Segment>+'r+'t
+//ExtractCompactSegments<'r, 't>
+{
+    ExtractCompactSegments {
+        segments: ExtractSegments {
+            code_and_doc_captures: r.captures_iter(source),
+            title_and_doc_in_multiline_capture: None
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+
+// impl Segment {
+//     // extend a segment with new data and return Empty
+//     // OR
+//     // replace a segment with new data and return the old segment
+//     fn push(&mut self, s: Segment) -> Option<Segment> {
+//         match (self, s) {
+//             (_, Segment::Empty) => Segment::Empty,
+//             (Segment::Empty, _) => {
+//                 // replace stuff
+//                 // ...
+//                 None
+//             },
+//             (ref mut Segment::Title(_), Segment::Title(_)) => {
+//                 error!("two title segments with nothing in between!??");
+//                 None
+//             },
+//             (ref mut Segment::Code(c), Segment::Code(cc)) => {
+//             },
+//             (ref mut Segment::Doc(d), Segment::Doc(dd)) => {
+//             },
+//             (ref mut a, b) => {
+//                 panic!("lol");
+//                 // replace b by a and return a
+//             }
+//         }
+//     }
+// }
 
 // fn append<F>(new_segment: Segment,
 //              buffered_segment: &mut Segment
@@ -59,29 +73,98 @@ impl Segment {
 //     }
 // }
 
-/// iterator over Option<ExtractSegments>
+// -----------------------------------------------------------------------------
+// ## Extracting segments
+
+/// Iterator<Item=Option<Segment>>
 struct ExtractSegments<'r, 't> {
     /// our regex captures that split doc from code
-    fc: regex::FindCaptures<'r, 't>,
+    code_and_doc_captures: regex::FindCaptures<'r, 't>,
     /// necessary for splitting multilines into titles and doc lines
-    multiline_doc_fc: Option<regex::FindCaptures<'r, 't>>
+    title_and_doc_in_multiline_capture: Option<regex::FindCaptures<'r, 't>>
 }
 
-/// iterator over segments
-pub struct ExtractCompactSegments<'r, 't> {
-    segments: ExtractSegments<'r, 't>
+lazy_static! {
+    /// regex to extract title and doc from multiline comments
+    static ref ML_MARGIN_L_RE: Regex = // multiline with margin
+        RegexBuilder::new(r"^[ \t\n]*[^ \t\n]+ ?([^\n]*\n?)$")
+        .multi_line(true)
+        .dot_matches_new_line(true)
+        .compile().expect("Wrong multiline split regexp");
+    static ref ML_NOMARGIN_L_RE: Regex = // multiline with no margin
+        RegexBuilder::new(r"^[\n\t]*([^\n]*\n?)$")
+        .multi_line(true)
+        .dot_matches_new_line(true)
+        .compile().expect("Wrong multiline split regexp");
+    static ref TITLE_SPLIT_RE: Regex = // split title between '##' and 'actual title'
+        RegexBuilder::new(r"^(#+).*")
+        .multi_line(true)
+        .dot_matches_new_line(true)
+        .compile().expect("Wrong title split regexp!");
 }
 
-pub fn extract_segments<'r, 't>(r: &'r regex::Regex, source: &'t str)
-                                -> impl trait Iterator<Segment>+'r+'t
-//ExtractCompactSegments<'r, 't>
-{
-    ExtractCompactSegments {
-        segments: ExtractSegments {
-            fc: r.captures_iter(source),
-            multiline_doc_fc: None
+impl<'r, 't> ExtractSegments<'r, 't> {
+    fn title_or_doc_segment(&mut self, line: &'t str) -> Segment {
+        if let Some(heading_capture) = TITLE_SPLIT_RE.captures_iter(line).first() {
+            Segment::Title((heading_capture.length(), line.toString()))
+        } else {
+            Segment::Doc(line.toString())
         }
     }
+}
+
+impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
+    type Item=Option<Segment>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(bm) = self.title_and_doc_in_multiline_capture {
+            // in multiline doc context
+            if let Some(c) = bm.next() {
+                if let Some(l) = c.at(1) {
+                    Some(title_or_doc_segment(l))
+                } else {
+                    Some(None)
+                }
+            } else {
+                self.title_and_doc_in_multiline_capture = None;
+                Some(None)
+            }
+        } else {
+            // primary context
+            let capture = self.code_and_doc_captures.next();
+            if let Some(c) = capture {
+                match (c.name("doc_sl"),c.name("doc_ml"),c.name("doc_ml_h"),c.name("doc_ml_l"),c.name("code")) {
+                    (None,None,None,None,None) => Some(None), // ignore
+                    (Some(ref sl),_,_,_,_) => // single comment line
+                        Some(title_or_doc_segment(sl)),
+                    (_,Some(ref ml),_,_,_) => { // multiline no margin
+                        self.title_and_doc_in_multiline_capture = Some(ML_NOMARGIN_L_RE.captures_iter(ml));
+                        Some(None)
+                    },
+                    (_,_,Some(ref ml_h),Some(ref ml_l),_) => { // multiline with margin
+                        self.title_and_doc_in_multiline_capture = Some(ML_MARGIN_L_RE.captures_iter(ml_l));
+                        Some(title_or_doc_segment(ml_h))
+                    },
+                    (_,_,_,_,Some(code)) =>  // code
+                        Some(Segment::Code(code)),
+                    (_,_,_,_,_) => {
+                        error!("Something went wrong when processing ExtractSegments");
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// ## Compacting segments
+
+/// Iterator<Item=<Segment>>
+pub struct ExtractCompactSegments<'r, 't> {
+    segments: ExtractSegments<'r, 't>
 }
 
 impl<'r, 't> Iterator for ExtractCompactSegments<'r, 't> {
@@ -131,79 +214,6 @@ impl<'r, 't> Iterator for ExtractCompactSegments<'r, 't> {
                         return None;
                     }
                 }
-            }
-        }
-    }
-}
-
-lazy_static! {
-    static ref ML_MARGIN_L_RE: Regex =
-        RegexBuilder::new(r"^[ \t\n]*[^ \t\n]+ ?([^\n]*\n?)$")
-        .multi_line(true)
-        .dot_matches_new_line(true)
-        .compile().expect("Wrong multiline split regexp");
-    static ref ML_NOMARGIN_L_RE: Regex =
-        RegexBuilder::new(r"^[\n\t]*([^\n]*\n?)$")
-        .multi_line(true)
-        .dot_matches_new_line(true)
-        .compile().expect("Wrong multiline split regexp");
-    static ref TITLE_SPLIT_RE: Regex =
-        RegexBuilder::new(r"^(#+).*")
-        .multi_line(true)
-        .dot_matches_new_line(true)
-        .compile().expect("Wrong title split regexp!");
-}
-
-
-impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
-    type Item=Option<Segment>;
-
-    fn title_or_doc_segment(&mut self, line: &'t str) -> Segment {
-        if let Some(heading_capture) = TITLE_SPLIT_RE.captures_iter(line).first() {
-            Segment::Title((heading_capture.length(), line.toString()))
-        } else {
-            Segment::Doc(line.toString())
-        }
-    }
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(bm) = self.multiline_doc_fc {
-            // in multiline doc context
-            if let Some(c) = bm.next() {
-                if let Some(l) = c.at(1) {
-                    Some(title_or_doc_segment(l))
-                } else {
-                    Some(None)
-                }
-            } else {
-                self.multiline_doc_fc = None;
-                Some(None)
-            }
-        } else {
-            // primary context
-            let capture = self.fc.next();
-            if let Some(c) = capture {
-                match (c.name("doc_sl"),c.name("doc_ml"),c.name("doc_ml_h"),c.name("doc_ml_l"),c.name("code")) {
-                    (None,None,None,None,None) => Some(None), // ignore
-                    (Some(ref sl),_,_,_,_) => // single comment line
-                        Some(title_or_doc_segment(sl)),
-                    (_,Some(ref ml),_,_,_) => { // multiline no margin
-                        self.multiline_doc_fc = Some(ML_NOMARGIN_L_RE.captures_iter(ml));
-                        Some(None)
-                    },
-                    (_,_,Some(ref ml_h),Some(ref ml_l),_) => { // multiline with margin
-                        self.multiline_doc_fc = Some(ML_MARGIN_L_RE.captures_iter(ml_l));
-                        Some(title_or_doc_segment(ml_h))
-                    },
-                    (_,_,_,_,Some(code)) =>  // code
-                        Some(Segment::Code(code)),
-                    (_,_,_,_,_) => {
-                        error!("Something went wrong when processing ExtractSegments");
-                        None
-                    }
-                }
-            } else {
-                None
             }
         }
     }

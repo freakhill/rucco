@@ -10,6 +10,8 @@ use hoedown::renderer::html;
 
 use std::path::{Path};
 
+use templates;
+
 /// ----------------------------------------------------------------------------
 /// Rendering a segment
 
