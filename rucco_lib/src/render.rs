@@ -1,4 +1,5 @@
 use segment::*;
+use languages::Languages;
 
 use syntect::parsing::SyntaxSet;
 use syntect::parsing::syntax_definition::SyntaxDefinition;

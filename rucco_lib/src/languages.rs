@@ -13,7 +13,7 @@ impl Languages {
         Languages {computed: BTreeMap::new(), raw: raw}
     }
 
-    fn get(&mut self, l: &str) -> &Option<Regex> {
+    pub fn get(&mut self, l: &str) -> &Option<Regex> {
         let lang_raw_value = self.raw.get(l);
         let entry = self.computed.entry(l.to_owned());
         entry.or_insert_with(|| {
@@ -67,7 +67,7 @@ pub fn compute_regex(language: &toml::Value) -> Option<Regex> {
     match RegexBuilder::new(&final_regexp)
         .multi_line(true)
         .dot_matches_new_line(true)
-        .compile() {
+        .build() {
             Ok(regexp) => Some(regexp),
             Err(e) => {
                 error!("Failed to build regex from language {:?}: {}", language, e);
