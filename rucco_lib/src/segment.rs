@@ -13,75 +13,25 @@ pub use segment::Segment as RenderedSegment;
 
 pub fn extract_segments<'r, 't>(r: &'r regex::Regex, source: &'t str)
                                 -> //impl Iterator<Item=Segment>+'r+'t
-ExtractCompactSegments<'r, 't>
+DenseSegments<'r, 't>
 {
-    let sparse_segment_iterator: ExtractSegments<'r, 't> =
-        ExtractSegments {
+    let sparse_segments: SparseSegments<'r, 't> =
+        SparseSegments {
             code_and_doc_captures: r.captures_iter(source),
             title_and_doc_in_multiline_capture: None
         };
 
-    let dense_segment_iterator: ExtractCompactSegments<'r, 't> =
-        ExtractCompactSegments { segments: sparse_segment_iterator };
+    let dense_segments: DenseSegments<'r, 't> =
+        DenseSegments { segments: sparse_segments, cur: None };
 
-    dense_segment_iterator
+    dense_segments
 }
-
-// -----------------------------------------------------------------------------
-
-// impl Segment {
-//     // extend a segment with new data and return Empty
-//     // OR
-//     // replace a segment with new data and return the old segment
-//     fn push(&mut self, s: Segment) -> Option<Segment> {
-//         match (self, s) {
-//             (_, Segment::Empty) => Segment::Empty,
-//             (Segment::Empty, _) => {
-//                 // replace stuff
-//                 // ...
-//                 None
-//             },
-//             (ref mut Segment::Title(_), Segment::Title(_)) => {
-//                 error!("two title segments with nothing in between!??");
-//                 None
-//             },
-//             (ref mut Segment::Code(c), Segment::Code(cc)) => {
-//             },
-//             (ref mut Segment::Doc(d), Segment::Doc(dd)) => {
-//             },
-//             (ref mut a, b) => {
-//                 panic!("lol");
-//                 // replace b by a and return a
-//             }
-//         }
-//     }
-// }
-
-// fn append<F>(new_segment: Segment,
-//              buffered_segment: &mut Segment
-//              //growing: &mut Option<String>,
-//              //other: &mut Option<String>,
-//              f: F) -> Segment
-//     where F: Fn(String) -> Segment{
-//     // append or create new code segment
-//     match growing {
-//         &mut None => {std::mem::replace(growing, Some(text.to_string()));},
-//         g => {
-//             let mut growing_string = g.as_mut().unwrap();
-//             growing_string.push_str(text);
-//         }
-//     }
-//     match other {
-//         &mut None => None,
-//         o => Some(f(std::mem::replace(o, None).unwrap()))
-//     }
-// }
 
 // -----------------------------------------------------------------------------
 // ## Extracting segments
 
 /// Iterator<Item=Option<Segment>>
-struct ExtractSegments<'r, 't> {
+struct SparseSegments<'r, 't> {
     /// our regex captures that split doc from code
     code_and_doc_captures: regex::CaptureMatches<'r, 't>,
     /// necessary for splitting multilines into titles and doc lines
@@ -107,16 +57,6 @@ lazy_static! {
         .build().expect("Wrong title split regexp!");
 }
 
-// impl<'r, 't> ExtractSegments<'r, 't> {
-//     fn title_or_doc_segment(&mut self, line: &'t str) -> Segment {
-//         if let Some(heading_capture) = TITLE_SPLIT_RE.captures_iter(line).first() {
-//             Segment::Title((heading_capture.length(), line.toString()))
-//         } else {
-//             Segment::Doc(line.toString())
-//         }
-//     }
-// }
-
 fn title_or_doc_segment(line: &str) -> Segment {
     if let Some(heading_capture) = TITLE_SPLIT_RE.captures_iter(line).next() {
         if let Some(h) = heading_capture.get(1) {
@@ -130,7 +70,7 @@ fn title_or_doc_segment(line: &str) -> Segment {
     }
 }
 
-impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
+impl<'r, 't> Iterator for SparseSegments<'r, 't> {
     type Item=Option<Segment>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -169,7 +109,7 @@ impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
                         (_,_,_,_,Some(code)) =>  // code
                             Some(Some(Segment::Code(code.as_str().to_owned()))),
                         (_,_,_,_,_) => {
-                            error!("Something went wrong when processing ExtractSegments");
+                            error!("Something went wrong when processing SparseSegments");
                             None
                         }
                     }
@@ -190,59 +130,39 @@ impl<'r, 't> Iterator for ExtractSegments<'r, 't> {
 // ## Compacting segments
 
 /// Iterator<Item=<Segment>>
-pub struct ExtractCompactSegments<'r, 't> {
-    segments: ExtractSegments<'r, 't>
+pub struct DenseSegments<'r, 't> {
+    segments: SparseSegments<'r, 't>,
+    cur: Option<Segment>
 }
 
-impl<'r, 't> Iterator for ExtractCompactSegments<'r, 't> {
+impl<'r, 't> Iterator for DenseSegments<'r, 't> {
     type Item=Segment;
 
     fn next(&mut self) -> Option<Segment> {
-        // change all og this to use 1 buffered extensible segment
-        panic!("lol");
-        // loop {
-        //     if let Some(segment) = self.it.next() {
-        //         match (segment, &mut self.current_doc, &mut self.current_code) {
-        //             (Segment::Doc(s), cd @ &mut None, &mut None) => {
-        //                 std::mem::replace(cd, Some(s));
-        //             },
-        //             (Segment::Doc(_), _cd, &mut None) => {
-        //                 error!("doc and doc together should not happen.");
-        //                 return None;
-        //             },
-        //             (Segment::Doc(_), &mut None, _cc) => {
-        //                 error!("doc should not happen with code and not previous doc.");
-        //                 return None;
-        //             },
-        //             (Segment::Code(s), &mut None, &mut None) => {
-        //                 return Some(Section{doc: String::from(""), code: s});
-        //             },
-        //             (Segment::Code(s), cd, &mut None) => {
-        //                 let doc = std::mem::replace(cd ,None).unwrap();
-        //                 return Some(Section{doc: doc, code: s});
-        //             },
-        //             (Segment::Code(_), &mut None, _cc) => {
-        //                 error!("code and code should not happen.");
-        //                 return None;
-        //             },
-        //             (_, _cd, _cc) => {
-        //                 error!("previously failed to emit a section.");
-        //                 return None;
-        //             },
-        //         }
-        //     } else {
-        //         match (&mut self.current_doc, &mut self.current_code) {
-        //             (&mut None, &mut None) => { return None; },
-        //             (mut doc, &mut None) => {
-        //                 let d = std::mem::replace(doc, None);
-        //                 return Some(Section{doc: d.unwrap(), code: "".to_string()});
-        //             },
-        //             (_, _) => {
-        //                 error!("this should not happen...");
-        //                 return None;
-        //             }
-        //         }
-        //     }
-        // }
+        loop {
+            match (&mut self.cur, self.segments.next()) {
+                // we're done
+                (cur, None) => return std::mem::replace(cur, None),
+                // skip dud
+                (_, Some(None)) => continue,
+                // first one! (no self.cur)
+                (cur @ &mut None, Some(n)) => {
+                    std::mem::replace(cur, n);
+                },
+                // ---- ok we're left with Some(_),Some(Some(_))
+                // same (=> append, except title, cannot append titles! they switch!)
+                (&mut Some(Segment::Code(ref mut c)),Some(Some(Segment::Code(ref n)))) => {
+                    c.push_str(n.as_str());
+                },
+                (&mut Some(Segment::Doc(ref mut c)),Some(Some(Segment::Doc(ref n)))) => {
+                    c.push_str(n.as_str());
+                },
+                // different (=> switch)
+                (cur, Some(n)) => {
+                    let res = std::mem::replace(cur, n);
+                    return res;
+                },
+            }
+        }
     }
 }
