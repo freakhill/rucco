@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use regex::{Regex,RegexBuilder};
+use toml;
 
 // figure out Arc, Mutex etc. afterwards
 pub struct Languages {

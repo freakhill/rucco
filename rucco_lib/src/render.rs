@@ -5,6 +5,11 @@ use syntect::parsing::syntax_definition::SyntaxDefinition;
 use syntect::highlighting::{ThemeSet, Theme};
 use syntect::html::highlighted_snippet_for_string;
 
+use hoedown::{Markdown,Html,Render};
+use hoedown::renderer::html;
+
+use std::path::{Path};
+
 /// ----------------------------------------------------------------------------
 /// Rendering a segment
 
@@ -19,12 +24,12 @@ fn render_segment(syntax_def: &SyntaxDefinition, segment: Segment) -> RenderedSe
     match segment {
         Segment::Title((h, title)) => {
             let md_doc = Markdown::new(title.as_str());
-            let title_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render</p>").to_owned();
+            let title_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render title</p>").to_owned();
             Segment::Title((h, title_html))
         },
         Segment::Doc(doc) => {
             let md_doc = Markdown::new(doc.as_str());
-            let doc_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render</p>").to_owned();
+            let doc_html = md_html.render(&md_doc).to_str().unwrap_or("<p>failed to render doc</p>").to_owned();
             Segment::Doc(doc_html)
         },
         Segment::Code(code) => {
@@ -52,9 +57,9 @@ pub fn render
 {
     SYNTAX_SET.with(|ss| {
         if let Some(syntax_def) = ss.find_syntax_by_extension(extension) {
-            if let &Some(ref regex) = languages.get(extension) {
+            if let &Some(ref lang) = languages.get(extension) {
                 let sections: Vec<Segment> =
-                    extract_segments(regex, source_text)
+                    extract_segments(lang, source_text)
                     .map(|s| render_segment(syntax_def,s)).collect();
                 Some(templates::classic::render(vec![].iter(),
                                                 css_rel_path,

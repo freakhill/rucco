@@ -39,6 +39,26 @@ impl Segment {
     }
 }
 
+// fn append<F>(new_segment: Segment,
+//              buffered_segment: &mut Segment
+//              //growing: &mut Option<String>,
+//              //other: &mut Option<String>,
+//              f: F) -> Segment
+//     where F: Fn(String) -> Segment{
+//     // append or create new code segment
+//     match growing {
+//         &mut None => {std::mem::replace(growing, Some(text.to_string()));},
+//         g => {
+//             let mut growing_string = g.as_mut().unwrap();
+//             growing_string.push_str(text);
+//         }
+//     }
+//     match other {
+//         &mut None => None,
+//         o => Some(f(std::mem::replace(o, None).unwrap()))
+//     }
+// }
+
 /// iterator over Option<ExtractSegments>
 struct ExtractSegments<'r, 't> {
     /// our regex captures that split doc from code
@@ -53,7 +73,9 @@ pub struct ExtractCompactSegments<'r, 't> {
 }
 
 pub fn extract_segments<'r, 't>(r: &'r regex::Regex, source: &'t str)
-                                -> ExtractCompactSegments<'r, 't> {
+                                -> impl trait Iterator<Segment>+'r+'t
+//ExtractCompactSegments<'r, 't>
+{
     ExtractCompactSegments {
         segments: ExtractSegments {
             fc: r.captures_iter(source),
