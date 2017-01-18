@@ -1,7 +1,10 @@
 extern crate env_logger;
-use toml;
+extern crate rucco_lib;
+extern crate toml;
+
 use std::collections::BTreeMap;
-use super::*;
+use rucco_lib::*;
+use rucco_lib::languages::compute_regex;
 
 const C_SAMPLE: &'static str = r"
 int a = 12;
@@ -53,16 +56,8 @@ fn regex_parse_ok() {
 #[test]
 fn segments_ok() {
     let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
-    for capture in r.segments_iter(C_SAMPLE) {
+    for capture in rucco_lib::segment::extract_segments(&r, C_SAMPLE) {
         println!("segments_ok: {:?}", capture);
-    };
-}
-
-#[test]
-fn into_sections_iter_ok() {
-    let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
-    for section in r.segments_iter(C_SAMPLE).into_sections_iter() {
-        println!("section: {:?}", section);
     };
 }
 
@@ -72,11 +67,8 @@ fn render_ok() {
     let mut raw: toml::Table = BTreeMap::new();
     let c = create_c_language();
     raw.insert("c".to_string(), c);
-    let mut langs = Languages {
-        computed: BTreeMap::new(),
-        raw: raw
-    };
-    if let Some(rendered) = render(&mut langs, "c", C_SAMPLE, "../style.css") {
+    let mut langs = Languages::new(raw);
+    if let Some(rendered) = render(&mut langs, "c", C_SAMPLE, &std::path::Path::new("./source_path.c"), "../style.css") {
         println!("file: {:#?}", rendered);
     } else {
         panic!("failed to generate sections");

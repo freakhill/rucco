@@ -10,10 +10,10 @@ extern crate regex;
 extern crate hoedown;
 extern crate syntect;
 
-mod segment;
-mod languages;
-mod templates;
-mod render;
+pub mod segment;
+pub mod languages;
+pub mod templates;
+pub mod render;
 
 pub use languages::Languages;
 pub use render::render;
