@@ -37,13 +37,13 @@ pub fn compute_regex(language: &toml::Value) -> Option<Regex> {
         .map(|v| v.as_str().expect("MALFORMED RUCCOFILE"));
 
     let mut regexp_vec: Vec<String> = Vec::new();
-    regexp_vec.push("(?:".to_string()); // global group
+    regexp_vec.push(r"(?:".to_string()); // global group
     regexp_vec.push(r"(?:\n+)|".to_string()); // empty lines
     if let Some(sl) = singleline_mark {
         // singleline
         regexp_vec.push([r"(?:",
                          r"^[ \t]*", sl, r" ?",
-                         r"(?:(?P<doc_sl>[^\n]*\n?)\n*",
+                         r"(?:(?P<doc_sl>[^\n]*\n?)\n*)",
                          r")|"].concat());
     };
     if let (Some(mh), Some(mf), Some(mm)) = (multiline_header_mark, multiline_footer_mark, multiline_margin_mark) {
@@ -64,6 +64,8 @@ pub fn compute_regex(language: &toml::Value) -> Option<Regex> {
     regexp_vec.push(r")".to_string()); // global group end and repeat
 
     let final_regexp = regexp_vec.concat();
+    debug!("building regexp from: {}", &final_regexp);
+
     match RegexBuilder::new(&final_regexp)
         .multi_line(true)
         .dot_matches_new_line(true)

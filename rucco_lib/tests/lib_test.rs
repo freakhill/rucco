@@ -26,7 +26,7 @@ int b = 77;
 momo
 */
 
-char* gororo = 'm'; // ignpre me!!!
+char* gororo = 'm'; // ignore me!!!
 
 /*
  * # moo
@@ -35,7 +35,7 @@ char* gororo = 'm'; // ignpre me!!!
 
 ";
 
-fn create_c_language() -> toml::Value {
+fn c_language() -> toml::Value {
     let mut c: toml::Table = BTreeMap::new();
     c.insert("name".to_string(), toml::Value::String("C".to_string()));
     c.insert("singleline".to_string(), toml::Value::String(r"//+".to_string()));
@@ -47,7 +47,8 @@ fn create_c_language() -> toml::Value {
 
 #[test]
 fn regex_parse_ok() {
-    let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
+    env_logger::init();
+    let r = compute_regex(&c_language()).expect("failed to create c language regex");
     for capture in r.captures_iter(C_SAMPLE) {
         println!("regex_parse_ok: {:?}", capture);
     };
@@ -55,7 +56,8 @@ fn regex_parse_ok() {
 
 #[test]
 fn segments_ok() {
-    let r = compute_regex(&create_c_language()).expect("failed to create c language regex");
+    env_logger::init();
+    let r = compute_regex(&c_language()).expect("failed to create c language regex");
     for capture in rucco_lib::segment::extract_segments(&r, C_SAMPLE) {
         println!("segments_ok: {:?}", capture);
     };
@@ -63,9 +65,9 @@ fn segments_ok() {
 
 #[test]
 fn render_ok() {
-    env_logger::init().unwrap();
+    env_logger::init();
     let mut raw: toml::Table = BTreeMap::new();
-    let c = create_c_language();
+    let c = c_language();
     raw.insert("c".to_string(), c);
     let mut langs = Languages::new(raw);
     if let Some(rendered) = render(&mut langs, "c", C_SAMPLE, &std::path::Path::new("./source_path.c"), "../style.css") {
