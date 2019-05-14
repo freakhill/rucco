@@ -1,6 +1,4 @@
-#![feature(plugin)]
-#![feature(conservative_impl_trait)]
-#![plugin(maud_macros)]
+#![feature(proc_macro_hygiene)]
 
 #[macro_use] extern crate maud;
 #[macro_use] extern crate lazy_static;

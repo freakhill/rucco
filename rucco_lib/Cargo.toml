@@ -5,13 +5,13 @@ authors = ["johan gall <johan.gall@gmail.com>"]
 
 [dependencies]
 log = "~0"
-syntect = "~1.0" # syntax highlighting
-hoedown = "~5.0" # markdown html rendering
-toml = "~0.2" # conf files
-regex = "~0" # parsing
+syntect = "~3" # syntax highlighting
+hoedown = "~6" # markdown html rendering
+toml = "~0" # conf files
+regex = "~1" # parsing
 maud = "~0" # templates
 maud_macros = "~0"
-lazy_static = "~0.1"
+lazy_static = "~1"
 
 [dev-dependencies]
 env_logger = "~0"

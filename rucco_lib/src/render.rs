@@ -1,10 +1,9 @@
 use segment::*;
 use languages::Languages;
 
-use syntect::parsing::SyntaxSet;
-use syntect::parsing::syntax_definition::SyntaxDefinition;
+use syntect::parsing::{SyntaxSet,SyntaxReference};
 use syntect::highlighting::{ThemeSet, Theme};
-use syntect::html::highlighted_snippet_for_string;
+use syntect::html::highlighted_html_for_string;
 
 use hoedown::{Markdown,Html,Render};
 use hoedown::renderer::html;
@@ -13,15 +12,17 @@ use std::path::{Path};
 
 use templates;
 
-/// ----------------------------------------------------------------------------
-/// Rendering a segment
-
 thread_local! {
     static THEME_SET: ThemeSet = ThemeSet::load_defaults();
     static THEME: Theme = THEME_SET.with(|ts| ts.themes["base16-ocean.dark"].clone());
+    //static SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_nonewlines();
+    static SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
 }
 
-fn render_segment(syntax_def: &SyntaxDefinition, segment: Segment) -> RenderedSegment {
+/// ----------------------------------------------------------------------------
+/// Rendering a segment
+
+fn render_segment(syntax_ref: &SyntaxReference, segment: Segment) -> RenderedSegment {
     let mut md_html = Html::new(html::Flags::empty(), 0);
 
     match segment {
@@ -37,7 +38,9 @@ fn render_segment(syntax_def: &SyntaxDefinition, segment: Segment) -> RenderedSe
         },
         Segment::Code(code) => {
             THEME.with(move |theme| {
-                let code_html = highlighted_snippet_for_string(&code, syntax_def, theme);
+                let code_html = SYNTAX_SET.with(|ss| {
+                    highlighted_html_for_string(&code, ss, syntax_ref, theme)
+                });
                 Segment::Code(code_html)
             })
         }
@@ -47,10 +50,6 @@ fn render_segment(syntax_def: &SyntaxDefinition, segment: Segment) -> RenderedSe
 /// ----------------------------------------------------------------------------
 /// Rendering a source file
 
-thread_local! {
-    static SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_nonewlines();
-}
-
 pub fn render
     (languages: &mut Languages,
      extension: &str,
@@ -59,11 +58,11 @@ pub fn render
      css_rel_path: &str) -> Option<String>
 {
     SYNTAX_SET.with(|ss| {
-        if let Some(syntax_def) = ss.find_syntax_by_extension(extension) {
+        if let Some(syntax_ref) = ss.find_syntax_by_extension(extension) {
             if let &Some(ref lang) = languages.get(extension) {
                 let sections: Vec<Segment> =
                     extract_segments(lang, source_text)
-                    .map(|s| render_segment(syntax_def,s)).collect();
+                    .map(|s| render_segment(syntax_ref,s)).collect();
                 Some(templates::classic::render(vec![].iter(),
                                                 css_rel_path,
                                                 source_path,

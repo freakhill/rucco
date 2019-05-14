@@ -16,12 +16,8 @@
 //! Concerning the source files, multiline and singleline comments
 //! can generally be supported.
 
-#![feature(plugin)]
-#![plugin(embed)]
-
-/// the embed plugin allows us to embed files into our binary!
-/// (base conf, css, js etc.)
-
+#[macro_use] extern crate rust_embed; /// for embedding css, html etc.
+//#[macro_use] extern crate serde_derive; /// for the config
 #[macro_use] extern crate log; /// for logging...
 extern crate env_logger; /// makes our logger configurable by environment variable (eg. RUST_LOG=debug)
 extern crate toml; /// for configuration files
@@ -32,9 +28,7 @@ extern crate tar;
 extern crate rucco_lib;
 
 use clap::{Arg, ArgMatches, App};
-use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::BTreeMap;
 use std::ops::DerefMut;
 use std::fs::File;
 use std::ffi::OsStr;
@@ -51,6 +45,10 @@ use rayon::prelude::*;
 use rucco_lib::{Languages, render};
 
 // ## Static data
+
+#[derive(RustEmbed)]
+#[folder = "resources/"]
+struct Resources;
 
 /// A *ruccofile* (toml-formated) is a configuration file for this program.
 const RUCCOFILE_NAME: &'static str = "Ruccofile.toml";
@@ -86,8 +84,30 @@ struct Config<'a> {
     recursive: bool,
     entries: Vec<&'a str>,
     output_dir: &'a str,
-    languages: &'a toml::Table
+    languages: &'a toml::value::Table
 }
+
+// #[derive(Deserialize)]
+// struct ConfigInput {
+//     recursive: Option<bool>,
+//     entries: Option<Vec<String>>,
+// }
+
+// #[derive(Deserialize)]
+// struct ConfigOutput {
+//     dir: Option<String>,
+// }
+
+// #[derive(Deserialize)]
+// struct ConfigLanguage {
+
+
+// #[derive(Deserialize)]
+// struct PartialConfig {
+//     input: Option<ConfigInput>,
+//     output: Option<ConfigOutput>,
+//     languages: Option<HashMap<String,ConfigLanguage>>,
+// }
 
 // ## CLI
 
@@ -141,27 +161,33 @@ impl<'a> Args<'a> {
 // ## Conf files
 
 /// This function parses a ruccofile whose path is given as parameter.
-fn parse_conf_file(path: &str) -> Result<toml::Table, io::Error> {
+fn parse_conf_file(path: &str) -> Result<toml::value::Table, io::Error> {
     let mut conf_file = File::open(path)?;
     let mut conf_string = String::new();
     conf_file.read_to_string(&mut conf_string)?;
-    Ok(toml::Parser::new(conf_string.as_str()).parse()
-       .expect("failed to parse custom ruccofile"))
+    if let Ok(toml::Value::Table(t)) = conf_string.parse::<toml::Value>() {
+        Ok(t)
+    } else {
+        panic!("failed to parse config Ruccofile!");
+    }
 }
 
 /// This function parses the base ruccofile embedded in our binary.
-fn parse_default_conf(mut resources: &mut HashMap<Vec<u8>, Vec<u8>>) -> toml::Table {
-    let file_as_bytes = resources.remove("Ruccofile.toml".as_bytes())
-        .expect("could not find default conf failed!??");
-    let file_as_string = String::from_utf8(file_as_bytes)
-        .expect("default conf not utf8!??");
-    toml::Parser::new(file_as_string.as_str()).parse()
-        .expect("default conf parsing failed!??")
+fn parse_embedded_conf() -> toml::value::Table {
+    let file_as_bytes = Resources::get("Ruccofile.toml")
+        .expect("could not find embedded default conf!");
+    let file_as_string = String::from_utf8(file_as_bytes.to_vec())
+        .expect("embedded conf not in ut8 format!");
+    if let Ok(toml::Value::Table(t)) = file_as_string.parse::<toml::Value>() {
+        t
+    } else {
+        panic!("failed to parse config embedded default conf!");
+    }
 }
 
 /// And this is a simple recursive function to merge configurations!
-fn merge_tables(base: &toml::Table, custom: &toml::Table) -> toml::Table {
-    let mut merged: toml::Table = BTreeMap::new();
+fn merge_tables(base: &toml::value::Table, custom: &toml::value::Table) -> toml::value::Table {
+    let mut merged: toml::value::Table = toml::map::Map::new();
     let keys: HashSet<&String> = base.keys().chain(custom.keys()).collect();
     for key in keys {
         let val = match (base.get(key), custom.get(key)) {
@@ -184,11 +210,11 @@ fn ensure_ruccofile_exists(config: &Config) -> Result<(), io::Error> {
     let ruccofile_path = Path::new(RUCCOFILE_NAME);
     if !ruccofile_path.is_file() {
         info!("generating configuration file: {}", RUCCOFILE_NAME);
-        let mut conf_input: toml::Table = BTreeMap::new();
-        let mut conf_output: toml::Table = BTreeMap::new();
-        let mut conf_languages: toml::Table = BTreeMap::new();
-        let mut input: toml::Table = BTreeMap::new();
-        let mut output: toml::Table = BTreeMap::new();
+        let mut conf_input: toml::value::Table = toml::map::Map::new();
+        let mut conf_output: toml::value::Table = toml::map::Map::new();
+        let mut conf_languages: toml::value::Table = toml::map::Map::new();
+        let mut input: toml::value::Table = toml::map::Map::new();
+        let mut output: toml::value::Table = toml::map::Map::new();
 
         input.insert("recursive".to_string(), toml::Value::Boolean(config.recursive));
         output.insert("dir".to_string(), toml::Value::String(config.output_dir.to_string()));
@@ -202,11 +228,11 @@ fn ensure_ruccofile_exists(config: &Config) -> Result<(), io::Error> {
 
         let mut ruccofile = File::create(RUCCOFILE_NAME)?;
         /// we do this that way only to make the final file more readable!
-        ruccofile.write_all(toml::encode_str(&conf_input).as_bytes())?;
+        ruccofile.write_all(toml::to_string(&conf_input).unwrap().as_bytes())?;
         ruccofile.write_all("\n".as_bytes())?;
-        ruccofile.write_all(toml::encode_str(&conf_output).as_bytes())?;
+        ruccofile.write_all(toml::to_string(&conf_output).unwrap().as_bytes())?;
         ruccofile.write_all("\n".as_bytes())?;
-        ruccofile.write_all(toml::encode_str(&conf_languages).as_bytes())?;
+        ruccofile.write_all(toml::to_string(&conf_languages).unwrap().as_bytes())?;
     }
     Ok(())
 }
@@ -220,12 +246,11 @@ fn ensure_dir(path: &PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn untar_resources(resources: &HashMap<Vec<u8>, Vec<u8>>,
-                   output_dir: &Path,
+fn untar_resources(output_dir: &Path,
                    pack_name: &str) -> io::Result<()> {
-    let tar_bytes = resources.get(pack_name.as_bytes())
+    let tar_bytes = Resources::get(pack_name)
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "could not find resource tar file"))?;
-    let mut tar = Archive::new(tar_bytes.as_slice());
+    let mut tar = Archive::new(&tar_bytes as &[u8]);
     try![tar.unpack(output_dir)];
     Ok(())
 }
@@ -282,19 +307,18 @@ fn htmlize(mut p: PathBuf) -> PathBuf {
 
 /// And now we put everything together.
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
 
     let matches = cli().get_matches();
     let args = Args::new(&matches);
-    let mut resources: HashMap<Vec<u8>, Vec<u8>> = embed!("resources");
 
     // conf
     debug!("# CONF");
-    let base_conf = parse_default_conf(&mut resources);
+    let base_conf = parse_embedded_conf();
     let custom_conf_path = if let Some(conf_path) = args.conf { conf_path } else { RUCCOFILE_NAME };
     let custom_conf = parse_conf_file(custom_conf_path).unwrap_or_else(|e| {
         info!("no custom ruccofile: {}", e);
-        BTreeMap::new()
+        toml::map::Map::new()
     });
     let conf = merge_tables(&base_conf, &custom_conf);
 
@@ -327,7 +351,7 @@ fn main() {
     let entries = if args.inputs.is_empty() {
         conf_input
             .get("entries").expect("malformed conf - no input.entries")
-            .as_slice().expect("malformed conf - input.entries is not an array")
+            .as_array().expect("malformed conf - input.entries is not an array")
             .iter().map(|ref v| v.as_str().expect("malformed conf - one entry in input.entries is not a string"))
             .collect()
     } else {
@@ -411,10 +435,13 @@ fn main() {
 
     debug!("## Processing files");
     let mut res: Vec<io::Result<()>> = vec![];
-    files.par_iter().map(|&(ref source, ref target)| process_file(&config, source, target)).collect_into(&mut res);
+    files.par_iter()
+        .map(|&(ref source, ref target)|
+             process_file(&config, source, target))
+        .collect_into_vec(&mut res);
 
     debug!("## Untar resources");
-    untar_resources(&resources, &output_dir, "classic.tar").unwrap_or_else(|e| {
+    untar_resources(&output_dir, "classic.tar").unwrap_or_else(|e| {
         panic!("resource extraction failed: {:?}", e);
     });
     ;

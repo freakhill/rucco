@@ -10,8 +10,8 @@ log = "~0"
 env_logger = "~0"
 clap = "~2" # command line argument parser
 toml = "~0" # conf files
-embed = "~0" # embed resources in binary
-walkdir = "~0"
-rayon = "~0" # parallelism
+rust-embed = "~4" # embed resources in binary
+walkdir = "~2"
+rayon = "~1" # parallelism
 tar = "~0"
 rucco_lib = { path = "rucco_lib" }

@@ -5,11 +5,11 @@ use toml;
 // figure out Arc, Mutex etc. afterwards
 pub struct Languages {
     computed: BTreeMap<String, Option<Regex>>,
-    raw: toml::Table
+    raw: toml::value::Table
 }
 
 impl Languages {
-    pub fn new(raw: toml::Table) -> Languages {
+    pub fn new(raw: toml::value::Table) -> Languages {
         Languages {computed: BTreeMap::new(), raw: raw}
     }
 
