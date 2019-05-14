@@ -87,28 +87,6 @@ struct Config<'a> {
     languages: &'a toml::value::Table
 }
 
-// #[derive(Deserialize)]
-// struct ConfigInput {
-//     recursive: Option<bool>,
-//     entries: Option<Vec<String>>,
-// }
-
-// #[derive(Deserialize)]
-// struct ConfigOutput {
-//     dir: Option<String>,
-// }
-
-// #[derive(Deserialize)]
-// struct ConfigLanguage {
-
-
-// #[derive(Deserialize)]
-// struct PartialConfig {
-//     input: Option<ConfigInput>,
-//     output: Option<ConfigOutput>,
-//     languages: Option<HashMap<String,ConfigLanguage>>,
-// }
-
 // ## CLI
 
 /// We segragate the generation of the CLI in its own function.
